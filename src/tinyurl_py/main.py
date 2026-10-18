@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
-from tinyurl_py.persistence.mongo import create_client
+from tinyurl_py.persistence.mongo import DATABASE_NAME, create_client, ensure_indexes
 
 
 @asynccontextmanager
@@ -16,6 +16,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # (after `yield`). The Mongo client is created here a single time and
     # parked on `app.state`, so every request can reach it.
     app.state.mongo = create_client()
+    # If Mongo is unreachable this raises and the app refuses to start: better
+    # than running without the unique indexes that protect our data.
+    await ensure_indexes(app.state.mongo[DATABASE_NAME])
     yield
     await app.state.mongo.close()
 

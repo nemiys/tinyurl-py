@@ -42,6 +42,20 @@ services:
       retries: 20
       start_period: 60s
 
+  # One-shot helper: waits for Cassandra, applies the schema, then exits.
+  cassandra-init:
+    image: cassandra:5
+    container_name: tinyurl-py-cassandra-init
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    volumes:
+      - ./cassandra/schema.cql:/schema.cql:ro
+    # Inside the compose network Cassandra is reached by service name and its
+    # normal port, not the host-mapped 9043.
+    command: ["cqlsh", "cassandra", "9042", "-f", "/schema.cql"]
+    restart: "no"
+
 volumes:
   mongo-data:
   cassandra-data:

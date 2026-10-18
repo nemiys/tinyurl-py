@@ -47,6 +47,9 @@ asyncio_mode = "auto"
 python_version = "3.12"
 strict = true
 mypy_path = "src"
+# Teaches mypy how pydantic models work, e.g. that BaseSettings fields are
+# filled from environment variables rather than constructor arguments.
+plugins = ["pydantic.mypy"]
 
 [dependency-groups]
 dev = [

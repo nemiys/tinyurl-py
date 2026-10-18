@@ -20,5 +20,11 @@ class Settings(BaseSettings):
     cassandra_host: str = "localhost"
     cassandra_port: int = 9043
 
+    # Signs every login token, so whoever holds it can forge a token for any
+    # user. Deliberately has NO default: the app refuses to start without one,
+    # instead of silently running with a key that anyone reading the code knows.
+    jwt_secret: str
+    jwt_expire_minutes: int = 60
+
 
 settings = Settings()

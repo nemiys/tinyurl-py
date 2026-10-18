@@ -37,6 +37,7 @@ async def test_me_returns_the_logged_in_user_without_secrets(http: AsyncClient) 
     assert set(body) == {"id", "email", "created_at"}
     assert body["id"] == user_id
     assert body["email"] == "dana@example.com"
+    assert body["created_at"].endswith("Z")  # a timezone-aware UTC date
 
 
 async def test_me_without_a_token_is_unauthorized(http: AsyncClient) -> None:

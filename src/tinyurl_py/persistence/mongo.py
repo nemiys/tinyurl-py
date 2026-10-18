@@ -20,9 +20,11 @@ type Client = AsyncMongoClient[dict[str, Any]]
 def create_client() -> Client:
     # One client per process is enough: it keeps its own pool of connections
     # and is safe to share, so the app creates it once at startup.
+    # tz_aware: read dates back as UTC-aware datetimes (Mongo stores UTC, but
+    # by default the driver returns them without a timezone).
     # By default the driver waits 30s for a reachable server before giving
     # up, which would make a "Mongo is down" answer painfully slow.
-    return AsyncMongoClient(settings.mongo_url, serverSelectionTimeoutMS=2000)
+    return AsyncMongoClient(settings.mongo_url, serverSelectionTimeoutMS=2000, tz_aware=True)
 
 
 async def ensure_indexes(db: AsyncDatabase[dict[str, Any]]) -> None:

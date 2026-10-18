@@ -1,0 +1,47 @@
+services:
+  redis:
+    image: redis:7
+    container_name: tinyurl-py-redis
+    ports:
+      - "6381:6379" # 6379 is used by the old nemiys-tinyurl, 6380 by wikiguard-py
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mongo:
+    image: mongo:8
+    container_name: tinyurl-py-mongo
+    ports:
+      - "27018:27017" # 27017 is used by the old nemiys-tinyurl
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  cassandra:
+    image: cassandra:5
+    container_name: tinyurl-py-cassandra
+    ports:
+      - "9043:9042" # 9042 is used by the old nemiys-tinyurl
+    environment:
+      # Cassandra defaults to using a large part of the machine's RAM; this
+      # is a local dev instance, so keep it small.
+      MAX_HEAP_SIZE: 512M
+      HEAP_NEWSIZE: 128M
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+volumes:
+  mongo-data:
+  cassandra-data:

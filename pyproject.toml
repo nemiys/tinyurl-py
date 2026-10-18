@@ -1,0 +1,49 @@
+[project]
+name = "tinyurl-py"
+version = "0.1.0"
+description = "URL shortener with smart links: FastAPI + Redis + MongoDB + Cassandra"
+authors = [
+    { name = "nemiys", email = "nemiys@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.143.5",
+    "pydantic-settings>=2.16.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+# Same small, readable rule set as wikiguard-py. E = pycodestyle errors,
+# F = pyflakes (unused imports/vars, real bugs), I = import sorting,
+# UP = modernize syntax for the target Python, B = flake8-bugbear.
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency injection needs `Depends(...)` as an argument default.
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = "src"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.17.1",
+]

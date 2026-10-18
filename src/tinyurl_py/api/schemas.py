@@ -26,6 +26,18 @@ class RegisterRequest(BaseModel):
     )
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr = Field(examples=["dana@example.com"])
+    # No minimum here: login must not reveal the password rules. The maximum
+    # stays so nobody can make the server hash a huge input.
+    password: str = Field(max_length=PASSWORD_MAX_LENGTH, examples=["correct horse battery staple"])
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 class UserPublic(BaseModel):
     """A user as the outside world may see them: no password, no hash."""
 

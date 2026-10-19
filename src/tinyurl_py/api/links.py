@@ -1,4 +1,4 @@
-"""Creating and reading links."""
+"""Creating, reading and deleting links."""
 
 from datetime import UTC, datetime
 from typing import Any
@@ -6,8 +6,9 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pymongo.errors import DuplicateKeyError
 
-from tinyurl_py.api.dependencies import CurrentUser, Database
+from tinyurl_py.api.dependencies import CurrentUser, Database, RedisClient
 from tinyurl_py.api.schemas import CreateLinkRequest, LinkPublic
+from tinyurl_py.cache.links import delete_cached_link
 from tinyurl_py.domain.codes import generate_code
 from tinyurl_py.settings import settings
 
@@ -86,3 +87,23 @@ async def get_link(code: str, user: CurrentUser, db: Database) -> LinkPublic:
     if link is None:
         raise HTTPException(status_code=404, detail="Link not found")
     return to_public(link)
+
+
+@router.delete(
+    "/{code}",
+    status_code=204,
+    responses={
+        401: {"description": "Missing, invalid or expired token"},
+        404: {"description": "No such link, or it belongs to someone else"},
+    },
+)
+async def delete_link(code: str, user: CurrentUser, db: Database, redis: RedisClient) -> None:
+    # Mongo first: it is the source of truth. Had we cleared the cache first, a
+    # click arriving in between would copy the link back into it.
+    result = await db.links.delete_one({"code": code, "owner_id": user["_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    # Without this the deleted link would keep redirecting until its cached
+    # copy expires (up to an hour).
+    await delete_cached_link(redis, code)

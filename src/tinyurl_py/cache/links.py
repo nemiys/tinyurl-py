@@ -69,3 +69,12 @@ async def cache_link(redis: Redis, code: str, link: CachedLink) -> None:
         await redis.set(_key(code), link.model_dump_json(), ex=ttl)
     except RedisError:
         logger.warning("Redis write failed for %s; continuing without cache", code)
+
+
+async def delete_cached_link(redis: Redis, code: str) -> None:
+    """Drop the copy of a deleted link. If Redis is down the copy simply
+    expires by itself within DEFAULT_TTL_SECONDS, so this is best effort."""
+    try:
+        await redis.delete(_key(code))
+    except RedisError:
+        logger.warning("Redis delete failed for %s; the cached copy will expire by itself", code)

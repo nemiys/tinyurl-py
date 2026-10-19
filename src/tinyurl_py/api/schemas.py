@@ -72,3 +72,12 @@ class LinkPublic(BaseModel):
     mobile_url: str | None
     expires_at: AwareDatetime | None
     created_at: AwareDatetime
+
+
+class LinkPage(BaseModel):
+    """One page of links, plus what a client needs to build "page 3 of 12"."""
+
+    items: list[LinkPublic]
+    total: int  # all of the user's links, not just this page
+    limit: int
+    offset: int

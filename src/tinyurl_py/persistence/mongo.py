@@ -35,4 +35,8 @@ async def ensure_indexes(db: AsyncDatabase[dict[str, Any]]) -> None:
     await db.users.create_index("email", unique=True)
     await db.links.create_index("code", unique=True)
     # Serves "my links, newest first": filter by owner, already sorted by date.
-    await db.links.create_index([("owner_id", ASCENDING), ("created_at", DESCENDING)])
+    # `_id` is the tie-breaker for links created at the same moment, so the
+    # order is always the same and pages never repeat or skip a link.
+    await db.links.create_index(
+        [("owner_id", ASCENDING), ("created_at", DESCENDING), ("_id", DESCENDING)]
+    )

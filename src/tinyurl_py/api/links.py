@@ -1,13 +1,14 @@
-"""Creating, reading and deleting links."""
+"""Creating, listing, reading and deleting links."""
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
+from pymongo import DESCENDING
 from pymongo.errors import DuplicateKeyError
 
 from tinyurl_py.api.dependencies import CurrentUser, Database, RedisClient
-from tinyurl_py.api.schemas import CreateLinkRequest, LinkPublic
+from tinyurl_py.api.schemas import CreateLinkRequest, LinkPage, LinkPublic
 from tinyurl_py.cache.links import delete_cached_link
 from tinyurl_py.domain.codes import generate_code
 from tinyurl_py.settings import settings
@@ -17,6 +18,11 @@ router = APIRouter(prefix="/links", tags=["links"])
 # With ~3.5 trillion possible codes a collision is very rare, and five in a
 # row is practically impossible unless the generator itself is broken.
 MAX_CODE_ATTEMPTS = 5
+
+DEFAULT_PAGE_SIZE = 20
+# Without an upper bound, `?limit=1000000` would make one request drag the
+# whole collection through the server.
+MAX_PAGE_SIZE = 100
 
 
 def to_public(link: dict[str, Any]) -> LinkPublic:
@@ -68,6 +74,35 @@ async def create_link(body: CreateLinkRequest, user: CurrentUser, db: Database) 
         status_code=503,
         detail="Could not allocate a short code, please try again",
         headers={"Retry-After": "1"},
+    )
+
+
+@router.get(
+    "",
+    response_model=LinkPage,
+    responses={401: {"description": "Missing, invalid or expired token"}},
+)
+async def list_links(
+    user: CurrentUser,
+    db: Database,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> LinkPage:
+    mine = {"owner_id": user["_id"]}
+    total = await db.links.count_documents(mine)
+    # Newest first; `_id` breaks ties so the order never changes between calls.
+    cursor = (
+        db.links.find(mine)
+        .sort([("created_at", DESCENDING), ("_id", DESCENDING)])
+        .skip(offset)
+        .limit(limit)
+    )
+    documents = await cursor.to_list()
+    return LinkPage(
+        items=[to_public(document) for document in documents],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 

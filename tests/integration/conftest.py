@@ -5,6 +5,7 @@ happens in a separate `tinyurl_test` database that is wiped around each test.
 """
 
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -37,3 +38,19 @@ async def http(db: AsyncDatabase[dict[str, Any]]) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
     app.dependency_overrides.clear()
+
+
+@dataclass
+class LoggedIn:
+    user_id: str
+    headers: dict[str, str]  # pass as `headers=` to act as this user
+
+
+@pytest.fixture
+async def logged_in(http: AsyncClient) -> LoggedIn:
+    """A freshly registered and logged-in user."""
+    credentials = {"email": "dana@example.com", "password": "correct horse battery staple"}
+    registered = await http.post("/auth/register", json=credentials)
+    login = await http.post("/auth/login", json=credentials)
+    token = login.json()["access_token"]
+    return LoggedIn(user_id=registered.json()["id"], headers={"Authorization": f"Bearer {token}"})

@@ -26,5 +26,8 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_expire_minutes: int = 60
 
+    # Public address of this service, used to build the short links we return.
+    base_url: str = "http://localhost:8001"
+
 
 settings = Settings()

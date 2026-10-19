@@ -9,6 +9,7 @@ from pymongo.errors import PyMongoError
 
 from tinyurl_py.api.auth import router as auth_router
 from tinyurl_py.api.links import router as links_router
+from tinyurl_py.api.redirect import router as redirect_router
 from tinyurl_py.api.users import router as users_router
 from tinyurl_py.persistence.mongo import DATABASE_NAME, create_client, ensure_indexes
 from tinyurl_py.persistence.redis_client import create_redis
@@ -51,3 +52,9 @@ async def ready(request: Request) -> JSONResponse:
     except PyMongoError:
         return JSONResponse(status_code=503, content={"status": "unavailable"})
     return JSONResponse(content={"status": "ready"})
+
+
+# MUST stay at the very end of this file: /{code} matches any single-segment
+# path, and routes are tried in the order they were registered. Anything added
+# above this line (routers, /health, /ready, ...) is matched before it.
+app.include_router(redirect_router)

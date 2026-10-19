@@ -1,6 +1,7 @@
 """Telling phones from everything else by the User-Agent header."""
 
 import pytest
+
 from tinyurl_py.domain.devices import is_mobile
 
 IPHONE = (

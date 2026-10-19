@@ -12,6 +12,7 @@ from bson.errors import InvalidId
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.asynchronous.database import AsyncDatabase
+from redis.asyncio import Redis
 
 from tinyurl_py.persistence.mongo import DATABASE_NAME
 from tinyurl_py.security.tokens import InvalidTokenError, decode_access_token
@@ -25,6 +26,14 @@ def get_db(request: Request) -> AsyncDatabase[dict[str, Any]]:
 
 # Endpoints write `db: Database` and get the object above.
 Database = Annotated[AsyncDatabase[dict[str, Any]], Depends(get_db)]
+
+
+def get_redis(request: Request) -> Redis:
+    redis: Redis = request.app.state.redis
+    return redis
+
+
+RedisClient = Annotated[Redis, Depends(get_redis)]
 
 
 # Reads "Authorization: Bearer <token>". It also adds the Authorize button to

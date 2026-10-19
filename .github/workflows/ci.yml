@@ -6,9 +6,17 @@ on:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    # Pinned on purpose. MongoDB refuses to start on Linux kernels 6.19 to
+    # 7.0.13 (https://www.mongodb.com/docs/v8.0/release-notes/8.0/), and
+    # ubuntu-latest moved to such a kernel. 22.04 ships kernel 6.8. Revisit
+    # when MongoDB or the runner image is fixed.
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+
+      # So a future "mongo exited (1)" can be diagnosed at a glance.
+      - name: Show kernel version
+        run: uname -r
 
       - uses: astral-sh/setup-uv@v6
         with:

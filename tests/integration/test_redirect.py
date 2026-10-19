@@ -3,7 +3,6 @@
 Needs the Mongo and Redis containers from docker-compose.yml running.
 """
 
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -16,26 +15,9 @@ from redis.asyncio import Redis, from_url
 from tests.integration.conftest import LoggedIn
 from tinyurl_py.api.dependencies import get_redis
 from tinyurl_py.main import app
-from tinyurl_py.settings import settings
 
 PHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobile/15E148 Safari/604.1"
 DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0 Safari/537.36"
-
-
-@pytest.fixture
-async def redis_client() -> AsyncIterator[Redis]:
-    client = from_url(settings.redis_url, db=15, decode_responses=True)
-    await client.flushdb()
-    yield client
-    await client.flushdb()
-    await client.aclose()
-
-
-@pytest.fixture
-async def web(http: AsyncClient, redis_client: Redis) -> AsyncClient:
-    """The test client, with the test Redis plugged in too."""
-    app.dependency_overrides[get_redis] = lambda: redis_client
-    return http
 
 
 async def create_link(web: AsyncClient, user: LoggedIn, **fields: str) -> str:

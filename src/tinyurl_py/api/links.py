@@ -1,6 +1,7 @@
-"""Creating links."""
+"""Creating and reading links."""
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pymongo.errors import DuplicateKeyError
@@ -15,6 +16,18 @@ router = APIRouter(prefix="/links", tags=["links"])
 # With ~3.5 trillion possible codes a collision is very rare, and five in a
 # row is practically impossible unless the generator itself is broken.
 MAX_CODE_ATTEMPTS = 5
+
+
+def to_public(link: dict[str, Any]) -> LinkPublic:
+    """A link as stored in Mongo -> what we show the outside world."""
+    return LinkPublic(
+        code=link["code"],
+        short_url=f"{settings.base_url}/{link['code']}",
+        url=link["url"],
+        mobile_url=link["mobile_url"],
+        expires_at=link["expires_at"],
+        created_at=link["created_at"],
+    )
 
 
 @router.post(
@@ -47,14 +60,7 @@ async def create_link(body: CreateLinkRequest, user: CurrentUser, db: Database) 
         except DuplicateKeyError:
             continue
 
-        return LinkPublic(
-            code=code,
-            short_url=f"{settings.base_url}/{code}",
-            url=link["url"],
-            mobile_url=link["mobile_url"],
-            expires_at=body.expires_at,
-            created_at=created_at,
-        )
+        return to_public({"code": code, **link})
 
     # 503 = "temporary problem, trying again will probably work".
     raise HTTPException(
@@ -62,3 +68,21 @@ async def create_link(body: CreateLinkRequest, user: CurrentUser, db: Database) 
         detail="Could not allocate a short code, please try again",
         headers={"Retry-After": "1"},
     )
+
+
+@router.get(
+    "/{code}",
+    response_model=LinkPublic,
+    responses={
+        401: {"description": "Missing, invalid or expired token"},
+        404: {"description": "No such link, or it belongs to someone else"},
+    },
+)
+async def get_link(code: str, user: CurrentUser, db: Database) -> LinkPublic:
+    # Filtering by owner in the query itself means a stranger's link is simply
+    # "not found": the answer is identical to an unknown code, so nobody can
+    # use this endpoint to discover which codes exist.
+    link = await db.links.find_one({"code": code, "owner_id": user["_id"]})
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found")
+    return to_public(link)

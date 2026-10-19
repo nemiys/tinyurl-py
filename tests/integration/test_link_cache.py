@@ -8,8 +8,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from redis.asyncio import Redis, from_url
-from tinyurl_py.cache.links import CachedLink, cache_link, get_cached_link
 
+from tinyurl_py.cache.links import CachedLink, cache_link, get_cached_link
 from tinyurl_py.settings import settings
 
 LINK = CachedLink(

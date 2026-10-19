@@ -11,6 +11,7 @@ from tinyurl_py.api.auth import router as auth_router
 from tinyurl_py.api.links import router as links_router
 from tinyurl_py.api.users import router as users_router
 from tinyurl_py.persistence.mongo import DATABASE_NAME, create_client, ensure_indexes
+from tinyurl_py.persistence.redis_client import create_redis
 
 
 @asynccontextmanager
@@ -22,7 +23,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # If Mongo is unreachable this raises and the app refuses to start: better
     # than running without the unique indexes that protect our data.
     await ensure_indexes(app.state.mongo[DATABASE_NAME])
+    # Redis is just a cache, so (unlike Mongo) the app starts without it.
+    app.state.redis = create_redis()
     yield
+    await app.state.redis.aclose()
     await app.state.mongo.close()
 
 

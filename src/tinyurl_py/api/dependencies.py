@@ -133,3 +133,20 @@ async def limit_link_creation(user: CurrentUser, redis: RedisClient) -> None:
         window_seconds=settings.create_link_window_seconds,
         detail="Too many links created, please slow down",
     )
+
+
+async def limit_login(request: Request, redis: RedisClient) -> None:
+    """Slow down password guessing: few login attempts per client IP.
+
+    Runs before the password is checked. That check is deliberately slow
+    (argon2), so refusing early also keeps a flood of attempts from loading
+    the CPU. Successful logins count as well, so a guesser cannot mix in
+    correct ones to confuse the count.
+    """
+    await enforce_rate_limit(
+        redis,
+        f"login:ip:{client_ip(request)}",
+        limit=settings.login_limit,
+        window_seconds=settings.login_window_seconds,
+        detail="Too many login attempts, please wait",
+    )

@@ -3,10 +3,10 @@
 import asyncio
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pymongo.errors import DuplicateKeyError
 
-from tinyurl_py.api.dependencies import Database
+from tinyurl_py.api.dependencies import Database, limit_login
 from tinyurl_py.api.schemas import LoginRequest, RegisterRequest, TokenResponse, UserPublic
 from tinyurl_py.security.passwords import hash_password, verify_password
 from tinyurl_py.security.tokens import create_access_token
@@ -52,7 +52,11 @@ async def register(body: RegisterRequest, db: Database) -> UserPublic:
 @router.post(
     "/login",
     response_model=TokenResponse,
-    responses={401: {"description": "Wrong email or password"}},
+    dependencies=[Depends(limit_login)],
+    responses={
+        401: {"description": "Wrong email or password"},
+        429: {"description": "Too many attempts from this address; see Retry-After"},
+    },
 )
 async def login(body: LoginRequest, db: Database) -> TokenResponse:
     user = await db.users.find_one({"email": body.email.lower()})

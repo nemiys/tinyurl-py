@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     create_link_window_seconds: int = 60
     redirect_limit: int = 120
     redirect_window_seconds: int = 60
+    # Login attempts per client IP: slows down password guessing.
+    login_limit: int = 10
+    login_window_seconds: int = 60
 
     # Name of this worker inside the consumer group. Run several workers by
     # giving each its own name. A restarted worker keeping its name picks up

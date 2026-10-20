@@ -37,9 +37,12 @@ async def db() -> AsyncIterator[AsyncDatabase[dict[str, Any]]]:
 
 
 @pytest.fixture
-async def http(db: AsyncDatabase[dict[str, Any]]) -> AsyncIterator[AsyncClient]:
-    # Swap the real database for the test one, only for the duration of a test.
+async def http(
+    db: AsyncDatabase[dict[str, Any]], redis_client: Redis
+) -> AsyncIterator[AsyncClient]:
+    # Swap the real databases for the test ones, only for the duration of a test.
     app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_redis] = lambda: redis_client
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
@@ -73,9 +76,8 @@ async def redis_client() -> AsyncIterator[Redis]:
 
 
 @pytest.fixture
-async def web(http: AsyncClient, redis_client: Redis) -> AsyncClient:
-    """The test client, with the test Redis plugged in too."""
-    app.dependency_overrides[get_redis] = lambda: redis_client
+async def web(http: AsyncClient) -> AsyncClient:
+    """Same client as `http`; older tests use this name."""
     return http
 
 

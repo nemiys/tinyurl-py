@@ -7,14 +7,12 @@ docker-compose.yml. Most tests use a fake store so that failures can be staged.
 import asyncio
 import datetime
 import uuid
-from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
 from redis.asyncio import Redis
 
 from tinyurl_py.events.clicks import CLICKS_STREAM, ClickEvent, publish_click
-from tinyurl_py.persistence.cassandra import close, connect
 from tinyurl_py.persistence.click_store import ClickStore
 from tinyurl_py.worker.consumer import GROUP, ClickConsumer
 
@@ -193,13 +191,6 @@ async def test_run_keeps_going_after_a_failure_and_stops_when_asked(redis_client
 
 SELECT_DAY = "SELECT event_id FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
 DELETE_DAY = "DELETE FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
-
-
-@pytest.fixture
-async def session() -> AsyncIterator[Any]:
-    session = await connect()
-    yield session
-    await close(session)
 
 
 async def test_clicks_reach_cassandra_and_a_duplicate_is_not_counted_twice(

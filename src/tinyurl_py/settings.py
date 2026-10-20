@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # wikiguard-py (Redis 6380) and the old nemiys-tinyurl (6379, 27017, 9042).
     redis_url: str = "redis://localhost:6381"
     mongo_url: str = "mongodb://localhost:27018"
+    mongo_database: str = "tinyurl"
     cassandra_host: str = "localhost"
     cassandra_port: int = 9043
 

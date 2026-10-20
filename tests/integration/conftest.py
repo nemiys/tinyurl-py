@@ -5,7 +5,7 @@ happens in a separate `tinyurl_test` database that is wiped around each test.
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -105,16 +105,32 @@ def touched_links() -> list[str]:
     return []
 
 
+@pytest.fixture(scope="session")
+def cassandra_session() -> Iterator[Any]:
+    """One Cassandra connection for the whole test run: connecting takes over a
+    second, and doing it for every test doubled the time of the suite. The driver
+    runs on its own threads, so the session works from any test's event loop."""
+    session = asyncio.run(connect())
+    yield session
+    asyncio.run(close(session))
+
+
 @pytest.fixture
-async def click_store(touched_links: list[str]) -> AsyncIterator[ClickStore]:
-    session = await connect()
-    store = await ClickStore.create(session)
+def session(cassandra_session: Any) -> Any:
+    """Same connection, under the name the Cassandra tests use."""
+    return cassandra_session
+
+
+@pytest.fixture
+async def click_store(
+    cassandra_session: Any, touched_links: list[str]
+) -> AsyncIterator[ClickStore]:
+    store = await ClickStore.create(cassandra_session)
     yield store
     for link_id in touched_links:
         for back in range(60):
             day = TODAY - timedelta(days=back)
-            await asyncio.to_thread(session.execute, DELETE_DAY, (link_id, day))
-    await close(session)
+            await asyncio.to_thread(cassandra_session.execute, DELETE_DAY, (link_id, day))
 
 
 @pytest.fixture

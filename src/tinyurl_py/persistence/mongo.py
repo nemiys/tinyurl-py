@@ -11,8 +11,6 @@ from pymongo.asynchronous.database import AsyncDatabase
 
 from tinyurl_py.settings import settings
 
-DATABASE_NAME = "tinyurl"
-
 # A Mongo document is a dict of field name -> value.
 type Client = AsyncMongoClient[dict[str, Any]]
 

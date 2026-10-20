@@ -10,7 +10,6 @@ from typing import Any
 import pytest
 
 from tinyurl_py.events.clicks import ClickEvent
-from tinyurl_py.persistence.cassandra import close, connect
 from tinyurl_py.persistence.click_store import ClickStore
 
 SELECT_DAY = (
@@ -18,13 +17,6 @@ SELECT_DAY = (
 )
 DELETE_DAY = "DELETE FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
 DAYS_USED = [datetime.date(2026, 1, 1), datetime.date(2026, 1, 2)]
-
-
-@pytest.fixture
-async def session() -> AsyncIterator[Any]:
-    session = await connect()
-    yield session
-    await close(session)
 
 
 @pytest.fixture

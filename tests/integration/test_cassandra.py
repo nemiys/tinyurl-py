@@ -7,25 +7,13 @@ from docker-compose.yml.
 import asyncio
 import datetime
 import uuid
-from collections.abc import AsyncIterator
 from typing import Any
-
-import pytest
-
-from tinyurl_py.persistence.cassandra import close, connect
 
 INSERT_CLICK = (
     "INSERT INTO clicks_by_link_day (link_id, day, clicked_at, event_id, device) "
     "VALUES (%s, %s, %s, %s, %s)"
 )
 COUNT_CLICKS = "SELECT count(*) FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
-
-
-@pytest.fixture
-async def session() -> AsyncIterator[Any]:
-    session = await connect()
-    yield session
-    await close(session)
 
 
 async def test_can_connect_and_query(session: Any) -> None:

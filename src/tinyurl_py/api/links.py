@@ -1,10 +1,10 @@
 """Creating, listing, reading and deleting links."""
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
-from pymongo import DESCENDING
+from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
 from tinyurl_py.api.dependencies import CurrentUser, Database, RedisClient
@@ -87,13 +87,25 @@ async def list_links(
     db: Database,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
     offset: Annotated[int, Query(ge=0)] = 0,
+    status: Literal["all", "active", "expired"] = "all",
+    order: Literal["asc", "desc"] = "desc",
 ) -> LinkPage:
-    mine = {"owner_id": user["_id"]}
-    total = await db.links.count_documents(mine)
-    # Newest first; `_id` breaks ties so the order never changes between calls.
+    # `Literal` is a closed list: any other value is a 422, so nobody can
+    # smuggle an arbitrary word into the query.
+    query: dict[str, Any] = {"owner_id": user["_id"]}
+    now = datetime.now(UTC)
+    if status == "active":
+        # No expiry date at all also means "still active".
+        query["$or"] = [{"expires_at": None}, {"expires_at": {"$gt": now}}]
+    elif status == "expired":
+        query["expires_at"] = {"$lte": now}
+
+    total = await db.links.count_documents(query)
+    direction = ASCENDING if order == "asc" else DESCENDING
+    # `_id` breaks ties so the order never changes between calls.
     cursor = (
-        db.links.find(mine)
-        .sort([("created_at", DESCENDING), ("_id", DESCENDING)])
+        db.links.find(query)
+        .sort([("created_at", direction), ("_id", direction)])
         .skip(offset)
         .limit(limit)
     )

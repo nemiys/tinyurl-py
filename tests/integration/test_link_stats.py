@@ -3,9 +3,7 @@
 Needs Mongo, Redis and Cassandra from docker-compose.yml.
 """
 
-import asyncio
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -14,41 +12,12 @@ from bson import ObjectId
 from httpx import AsyncClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from tests.integration.conftest import LoggedIn
+from tests.integration.conftest import TODAY, LoggedIn, MakeLink
 from tests.integration.test_get_link import register_other_user
-from tinyurl_py.api.dependencies import get_click_store
 from tinyurl_py.events.clicks import ClickEvent
 from tinyurl_py.main import app
 from tinyurl_py.persistence import cassandra as cassandra_module
-from tinyurl_py.persistence.cassandra import close, connect
 from tinyurl_py.persistence.click_store import ClickStore, LazyClickStore
-
-DELETE_DAY = "DELETE FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
-TODAY = datetime.now(UTC).date()
-
-
-@pytest.fixture
-def touched_links() -> list[str]:
-    """Links that got clicks in Cassandra, so the fixture below can clean up."""
-    return []
-
-
-@pytest.fixture
-async def click_store(touched_links: list[str]) -> AsyncIterator[ClickStore]:
-    session = await connect()
-    store = await ClickStore.create(session)
-    yield store
-    for link_id in touched_links:
-        for back in range(60):
-            day = TODAY - timedelta(days=back)
-            await asyncio.to_thread(session.execute, DELETE_DAY, (link_id, day))
-    await close(session)
-
-
-@pytest.fixture
-async def stats_web(web: AsyncClient, click_store: ClickStore) -> AsyncClient:
-    app.dependency_overrides[get_click_store] = lambda: click_store
-    return web
 
 
 async def add_clicks(
@@ -61,25 +30,6 @@ async def add_clicks(
             {"event_id": uuid.uuid4(), "link_id": link_id, "clicked_at": at, "device": "mobile"}
         )
         await store.save(event)
-
-
-type MakeLink = Callable[[], Awaitable[tuple[str, str]]]
-
-
-@pytest.fixture
-def make_link(web: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]) -> MakeLink:
-    """Creates a link through the API. Returns (code, link_id), where link_id is
-    the id the click events (and so the Cassandra rows) use."""
-
-    async def make() -> tuple[str, str]:
-        body = {"url": "https://example.com/p"}
-        response = await web.post("/links", json=body, headers=logged_in.headers)
-        code: str = response.json()["code"]
-        document = await db.links.find_one({"code": code})
-        assert document is not None
-        return code, str(document["_id"])
-
-    return make
 
 
 async def test_a_link_nobody_clicked_has_zero_clicks(

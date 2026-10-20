@@ -4,8 +4,10 @@ They need the Mongo container from docker-compose.yml running. Everything
 happens in a separate `tinyurl_test` database that is wiped around each test.
 """
 
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -13,8 +15,10 @@ from httpx import ASGITransport, AsyncClient
 from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis, from_url
 
-from tinyurl_py.api.dependencies import get_db, get_redis
+from tinyurl_py.api.dependencies import get_click_store, get_db, get_redis
 from tinyurl_py.main import app
+from tinyurl_py.persistence.cassandra import close, connect
+from tinyurl_py.persistence.click_store import ClickStore
 from tinyurl_py.persistence.mongo import create_client, ensure_indexes
 from tinyurl_py.settings import settings
 
@@ -73,3 +77,52 @@ async def web(http: AsyncClient, redis_client: Redis) -> AsyncClient:
     """The test client, with the test Redis plugged in too."""
     app.dependency_overrides[get_redis] = lambda: redis_client
     return http
+
+
+# Cassandra and click statistics, shared by several test files.
+
+DELETE_DAY = "DELETE FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
+TODAY = datetime.now(UTC).date()
+
+
+@pytest.fixture
+def touched_links() -> list[str]:
+    """Links that got clicks in Cassandra, so the fixture below can clean up."""
+    return []
+
+
+@pytest.fixture
+async def click_store(touched_links: list[str]) -> AsyncIterator[ClickStore]:
+    session = await connect()
+    store = await ClickStore.create(session)
+    yield store
+    for link_id in touched_links:
+        for back in range(60):
+            day = TODAY - timedelta(days=back)
+            await asyncio.to_thread(session.execute, DELETE_DAY, (link_id, day))
+    await close(session)
+
+
+@pytest.fixture
+async def stats_web(web: AsyncClient, click_store: ClickStore) -> AsyncClient:
+    app.dependency_overrides[get_click_store] = lambda: click_store
+    return web
+
+
+type MakeLink = Callable[[], Awaitable[tuple[str, str]]]
+
+
+@pytest.fixture
+def make_link(web: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]) -> MakeLink:
+    """Creates a link through the API. Returns (code, link_id), where link_id is
+    the id the click events (and so the Cassandra rows) use."""
+
+    async def make() -> tuple[str, str]:
+        body = {"url": "https://example.com/p"}
+        response = await web.post("/links", json=body, headers=logged_in.headers)
+        code: str = response.json()["code"]
+        document = await db.links.find_one({"code": code})
+        assert document is not None
+        return code, str(document["_id"])
+
+    return make

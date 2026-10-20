@@ -3,7 +3,11 @@
 Needs the Mongo and Redis containers from docker-compose.yml running.
 """
 
+from datetime import UTC, datetime
+from typing import Any
+
 from httpx import AsyncClient
+from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis, from_url
 
 from tests.integration.conftest import LoggedIn
@@ -80,3 +84,29 @@ async def test_delete_succeeds_even_if_redis_is_down(web: AsyncClient, logged_in
 
     assert response.status_code == 204  # Mongo is the truth; the cache copy expires by itself
     await dead.aclose()
+
+
+async def test_deleting_keeps_the_row_but_marks_it_as_deleted(
+    web: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    code = await create_link(web, logged_in)
+
+    await web.delete(f"/links/{code}", headers=logged_in.headers)
+
+    row = await db.links.find_one({"code": code})
+    assert row is not None  # still there: its statistics stay reachable, its code stays taken
+    assert row["deleted_at"] is not None
+
+
+async def test_a_deleted_link_is_hidden_from_redirect_lookup_listing_and_delete(
+    web: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    code = await create_link(web, logged_in)
+    await db.links.update_one({"code": code}, {"$set": {"deleted_at": datetime.now(UTC)}})
+
+    assert (await web.get(f"/{code}")).status_code == 404  # no redirect
+    assert (await web.get(f"/links/{code}", headers=logged_in.headers)).status_code == 404
+    assert (await web.delete(f"/links/{code}", headers=logged_in.headers)).status_code == 404
+    listing = (await web.get("/links", headers=logged_in.headers)).json()
+    assert listing["total"] == 0
+    assert listing["items"] == []

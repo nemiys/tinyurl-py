@@ -41,7 +41,11 @@ Details that matter:
   `X-Forwarded-For` by our code, because any client can send that header and
   pick a new "address" per request. Behind a proxy, run uvicorn with
   `--forwarded-allow-ips` set to the proxy: it then substitutes the real address
-  only for requests that come from that trusted proxy.
+  only for requests that come from that trusted proxy. Uvicorn trusts
+  `127.0.0.1` by default, so a client connecting from the same machine CAN
+  choose its address with that header (seen while testing locally; with
+  `--no-proxy-headers` the same request is limited). Harmless where only the
+  proxy can reach the app, and the reason to set the trusted list explicitly.
 - **Time comes from the application** (an injected clock) rather than from
   Redis, which keeps the limiter testable without sleeping.
 

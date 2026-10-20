@@ -44,6 +44,19 @@ extend-immutable-calls = ["fastapi.Depends"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 
+[tool.coverage.run]
+source = ["tinyurl_py"]
+branch = true
+
+[tool.coverage.report]
+# CI fails if coverage falls below this. It sits a little under the current
+# level (99%): a guard against forgetting tests, not a target to game.
+fail_under = 95
+show_missing = true
+skip_covered = true
+# The line that starts the worker as a program cannot run inside a test.
+exclude_also = ["if __name__ == .__main__.:"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

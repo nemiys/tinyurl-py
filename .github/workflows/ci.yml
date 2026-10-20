@@ -4,8 +4,18 @@ on:
   push:
   pull_request:
 
+# Only reads the repository. Nothing here needs more.
+permissions:
+  contents: read
+
+# A new push cancels the run of the previous commit of the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   checks:
+    timeout-minutes: 15
     # Pinned on purpose. MongoDB refuses to start on Linux kernels 6.19 to
     # 7.0.13 (https://www.mongodb.com/docs/v8.0/release-notes/8.0/), and
     # ubuntu-latest moved to such a kernel. 22.04 ships kernel 6.8. Revisit
@@ -41,8 +51,13 @@ jobs:
       - name: Type check
         run: uv run mypy src tests
 
-      - name: Tests
-        run: uv run pytest
+      # Fails if coverage is below `fail_under` in pyproject.toml.
+      - name: Tests with coverage
+        run: uv run pytest --cov
+
+      - name: Coverage summary
+        if: always()
+        run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
 
       # Only when something failed: show what the containers were saying.
       - name: Service logs

@@ -149,3 +149,104 @@ async def test_login_is_required(http: AsyncClient) -> None:
     response = await http.get("/links")
 
     assert response.status_code == 401
+
+
+async def insert_link(
+    db: AsyncDatabase[dict[str, Any]],
+    owner_id: str,
+    code: str,
+    *,
+    minutes: int,
+    expires_at: datetime | None,
+) -> None:
+    await db.links.insert_one(
+        {
+            "code": code,
+            "owner_id": ObjectId(owner_id),
+            "url": f"https://example.com/{code}",
+            "mobile_url": None,
+            "expires_at": expires_at,
+            "created_at": START + timedelta(minutes=minutes),
+        }
+    )
+
+
+async def insert_mixed_links(db: AsyncDatabase[dict[str, Any]], owner_id: str) -> None:
+    """Oldest to newest: never expires, already expired, expires tomorrow."""
+    now = datetime.now(UTC)
+    await insert_link(db, owner_id, "Forever", minutes=0, expires_at=None)
+    await insert_link(db, owner_id, "Expired", minutes=1, expires_at=now - timedelta(days=1))
+    await insert_link(db, owner_id, "Future1", minutes=2, expires_at=now + timedelta(days=1))
+
+
+async def test_order_asc_puts_the_oldest_first(
+    http: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    await insert_links(db, logged_in.user_id, 3)
+
+    body = (await http.get("/links?order=asc", headers=logged_in.headers)).json()
+
+    assert [item["code"] for item in body["items"]] == ["L0", "L1", "L2"]
+
+
+async def test_status_all_is_the_default_and_shows_everything(
+    http: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    await insert_mixed_links(db, logged_in.user_id)
+
+    default = (await http.get("/links", headers=logged_in.headers)).json()
+    explicit = (await http.get("/links?status=all", headers=logged_in.headers)).json()
+
+    assert default["total"] == explicit["total"] == 3
+
+
+async def test_status_active_hides_expired_links(
+    http: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    await insert_mixed_links(db, logged_in.user_id)
+
+    body = (await http.get("/links?status=active", headers=logged_in.headers)).json()
+
+    # A link without an expiry date counts as active.
+    assert [item["code"] for item in body["items"]] == ["Future1", "Forever"]
+
+
+async def test_status_expired_shows_only_expired_links(
+    http: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    await insert_mixed_links(db, logged_in.user_id)
+
+    body = (await http.get("/links?status=expired", headers=logged_in.headers)).json()
+
+    assert [item["code"] for item in body["items"]] == ["Expired"]
+
+
+async def test_total_counts_only_links_that_match_the_filter(
+    http: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    await insert_mixed_links(db, logged_in.user_id)
+
+    body = (await http.get("/links?status=active&limit=1", headers=logged_in.headers)).json()
+
+    assert len(body["items"]) == 1
+    assert body["total"] == 2  # not 3: the expired link is not part of this list
+
+
+async def test_filter_order_and_paging_work_together(
+    http: AsyncClient, logged_in: LoggedIn, db: AsyncDatabase[dict[str, Any]]
+) -> None:
+    await insert_mixed_links(db, logged_in.user_id)
+
+    url = "/links?status=active&order=asc&limit=1&offset=1"
+    body = (await http.get(url, headers=logged_in.headers)).json()
+
+    assert [item["code"] for item in body["items"]] == ["Future1"]
+
+
+@pytest.mark.parametrize("query", ["status=deleted", "status=", "order=sideways", "order=ASC"])
+async def test_unknown_filter_or_order_values_are_rejected(
+    http: AsyncClient, logged_in: LoggedIn, query: str
+) -> None:
+    response = await http.get(f"/links?{query}", headers=logged_in.headers)
+
+    assert response.status_code == 422

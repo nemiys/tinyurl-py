@@ -16,6 +16,7 @@ from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis, from_url
 
 from tinyurl_py.api.dependencies import get_click_store, get_db, get_redis
+from tinyurl_py.domain import urls
 from tinyurl_py.main import app
 from tinyurl_py.persistence.cassandra import close, connect
 from tinyurl_py.persistence.click_store import ClickStore
@@ -23,6 +24,17 @@ from tinyurl_py.persistence.mongo import create_client, ensure_indexes
 from tinyurl_py.settings import settings
 
 TEST_DATABASE = "tinyurl_test"
+
+
+@pytest.fixture(autouse=True)
+def fake_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every name resolves to a public address, so tests never touch the network
+    (and do not depend on whether example.com happens to be reachable)."""
+
+    async def resolve(host: str) -> list[str]:
+        return ["93.184.216.34"]
+
+    monkeypatch.setattr(urls, "resolve_host", resolve)
 
 
 @pytest.fixture

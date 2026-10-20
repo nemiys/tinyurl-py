@@ -1,9 +1,9 @@
 """Which destinations a short link may point to."""
 
 import pytest
-from tinyurl_py.domain.urls import check_destination, is_public_host
 
 from tinyurl_py.domain import urls
+from tinyurl_py.domain.urls import check_destination, is_public_host
 from tinyurl_py.settings import settings
 
 

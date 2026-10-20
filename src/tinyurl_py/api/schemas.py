@@ -48,8 +48,9 @@ class UserPublic(BaseModel):
 
 class CreateLinkRequest(BaseModel):
     # HttpUrl accepts only http/https and caps the length at 2083 characters, so
-    # `javascript:`, `data:` and `ftp:` links are rejected. Blocking internal
-    # addresses such as http://localhost is still to do (stage 7).
+    # `javascript:`, `data:` and `ftp:` links are rejected. Where the address
+    # leads (internal hosts and the like) is checked in the endpoint, because
+    # that may need a DNS lookup.
     url: HttpUrl = Field(examples=["https://example.com/products/summer-sale"])
     # Smart-link rule: visitors on a mobile device are sent here instead.
     mobile_url: HttpUrl | None = Field(default=None, examples=["https://m.example.com/summer"])

@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 
 from tinyurl_py.api.auth import router as auth_router
+from tinyurl_py.api.errors import install_error_handlers
 from tinyurl_py.api.links import router as links_router
 from tinyurl_py.api.redirect import router as redirect_router
 from tinyurl_py.api.users import router as users_router
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="tinyurl-py", lifespan=lifespan)
+install_error_handlers(app)
 app.include_router(auth_router)
 app.include_router(links_router)
 app.include_router(users_router)

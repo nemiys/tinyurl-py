@@ -17,6 +17,7 @@ from tinyurl_py.api.dependencies import (
 from tinyurl_py.api.schemas import CreateLinkRequest, DayClicks, LinkPage, LinkPublic, LinkStats
 from tinyurl_py.cache.links import delete_cached_link
 from tinyurl_py.domain.codes import generate_code
+from tinyurl_py.domain.urls import check_destination
 from tinyurl_py.settings import settings
 
 router = APIRouter(prefix="/links", tags=["links"])
@@ -54,10 +55,23 @@ def to_public(link: dict[str, Any]) -> LinkPublic:
     responses={
         401: {"description": "Missing, invalid or expired token"},
         429: {"description": "Too many links created recently; see Retry-After"},
+        422: {"description": "Invalid input, or a destination that is not public"},
         503: {"description": "No free short code was found; try again"},
     },
 )
 async def create_link(body: CreateLinkRequest, user: CurrentUser, db: Database) -> LinkPublic:
+    # The schema already guaranteed http/https and a sane length; this checks
+    # WHERE the address leads (no internal addresses, no loop back to us).
+    for field, address in (("url", body.url), ("mobile_url", body.mobile_url)):
+        if address is None:
+            continue
+        problem = await check_destination(address.host or "")
+        if problem is not None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "unsafe_destination", "message": f"{field} {problem}"},
+            )
+
     created_at = datetime.now(UTC)
     link = {
         "owner_id": user["_id"],

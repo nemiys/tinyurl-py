@@ -11,6 +11,7 @@ from tinyurl_py.api.auth import router as auth_router
 from tinyurl_py.api.links import router as links_router
 from tinyurl_py.api.redirect import router as redirect_router
 from tinyurl_py.api.users import router as users_router
+from tinyurl_py.persistence.click_store import LazyClickStore
 from tinyurl_py.persistence.mongo import DATABASE_NAME, create_client, ensure_indexes
 from tinyurl_py.persistence.redis_client import create_redis
 
@@ -26,7 +27,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_indexes(app.state.mongo[DATABASE_NAME])
     # Redis is just a cache, so (unlike Mongo) the app starts without it.
     app.state.redis = create_redis()
+    # Cassandra is only needed for statistics, so nothing connects yet: see
+    # LazyClickStore.
+    app.state.clicks = LazyClickStore()
     yield
+    await app.state.clicks.close()
     await app.state.redis.aclose()
     await app.state.mongo.close()
 

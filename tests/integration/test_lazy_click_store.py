@@ -4,14 +4,14 @@ from typing import Any
 
 import pytest
 
-from tinyurl_py.persistence import click_store as click_store_module
+from tinyurl_py.persistence import cassandra as cassandra_module
 from tinyurl_py.persistence.click_store import ClickStoreUnavailable, LazyClickStore
 
 
 async def test_it_connects_on_first_use_and_then_reuses_the_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    real_connect = click_store_module.connect
+    real_connect = cassandra_module.connect
     calls = 0
 
     async def counting_connect() -> Any:
@@ -19,7 +19,7 @@ async def test_it_connects_on_first_use_and_then_reuses_the_connection(
         calls += 1
         return await real_connect()
 
-    monkeypatch.setattr(click_store_module, "connect", counting_connect)
+    monkeypatch.setattr(cassandra_module, "connect", counting_connect)
     lazy = LazyClickStore()
     assert calls == 0  # nothing happens until somebody asks
 
@@ -34,18 +34,18 @@ async def test_it_connects_on_first_use_and_then_reuses_the_connection(
 async def test_an_unreachable_cassandra_is_reported_and_retried_next_time(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    real_connect = click_store_module.connect
+    real_connect = cassandra_module.connect
 
     async def broken_connect() -> Any:
         raise OSError("no route to cassandra")
 
-    monkeypatch.setattr(click_store_module, "connect", broken_connect)
+    monkeypatch.setattr(cassandra_module, "connect", broken_connect)
     lazy = LazyClickStore()
 
     with pytest.raises(ClickStoreUnavailable):
         await lazy.get()
 
-    monkeypatch.setattr(click_store_module, "connect", real_connect)  # it came back
+    monkeypatch.setattr(cassandra_module, "connect", real_connect)  # it came back
     assert await lazy.get() is not None
     await lazy.close()
 

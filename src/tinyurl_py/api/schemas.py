@@ -6,7 +6,7 @@ expose it. Pydantic checks every incoming request against these classes and
 FastAPI answers 422 with an explanation when a request does not fit.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from pydantic import AwareDatetime, BaseModel, EmailStr, Field, HttpUrl, field_validator
 
@@ -81,3 +81,15 @@ class LinkPage(BaseModel):
     total: int  # all of the user's links, not just this page
     limit: int
     offset: int
+
+
+class DayClicks(BaseModel):
+    day: date
+    clicks: int
+
+
+class LinkStats(BaseModel):
+    code: str
+    total_clicks: int  # the whole life of the link, not just `days`
+    days: list[DayClicks]  # oldest first, one entry per day, 0 for quiet days
+    deleted: bool  # a deleted link keeps its statistics

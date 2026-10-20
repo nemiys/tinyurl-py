@@ -1,14 +1,14 @@
-"""Creating, listing, reading and deleting links."""
+"""Creating, listing, reading, deleting and measuring links."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
-from tinyurl_py.api.dependencies import CurrentUser, Database, RedisClient
-from tinyurl_py.api.schemas import CreateLinkRequest, LinkPage, LinkPublic
+from tinyurl_py.api.dependencies import Clicks, CurrentUser, Database, RedisClient
+from tinyurl_py.api.schemas import CreateLinkRequest, DayClicks, LinkPage, LinkPublic, LinkStats
 from tinyurl_py.cache.links import delete_cached_link
 from tinyurl_py.domain.codes import generate_code
 from tinyurl_py.settings import settings
@@ -23,6 +23,9 @@ DEFAULT_PAGE_SIZE = 20
 # Without an upper bound, `?limit=1000000` would make one request drag the
 # whole collection through the server.
 MAX_PAGE_SIZE = 100
+
+DEFAULT_STATS_DAYS = 30
+MAX_STATS_DAYS = 90
 
 
 def to_public(link: dict[str, Any]) -> LinkPublic:
@@ -136,6 +139,44 @@ async def get_link(code: str, user: CurrentUser, db: Database) -> LinkPublic:
     if link is None:
         raise HTTPException(status_code=404, detail="Link not found")
     return to_public(link)
+
+
+@router.get(
+    "/{code}/stats",
+    response_model=LinkStats,
+    responses={
+        401: {"description": "Missing, invalid or expired token"},
+        404: {"description": "No such link, or it belongs to someone else"},
+        503: {"description": "Statistics are temporarily unavailable"},
+    },
+)
+async def get_link_stats(
+    code: str,
+    user: CurrentUser,
+    db: Database,
+    clicks: Clicks,
+    days: Annotated[int, Query(ge=1, le=MAX_STATS_DAYS)] = DEFAULT_STATS_DAYS,
+) -> LinkStats:
+    # No `deleted_at` filter on purpose: a deleted link keeps its statistics.
+    link = await db.links.find_one({"code": code, "owner_id": user["_id"]})
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found")
+
+    # Count every day from the day the link was created until today, because the
+    # total covers the link's whole life. Days are UTC, like the rows.
+    today = datetime.now(UTC).date()
+    first_day = link["created_at"].astimezone(UTC).date()
+    all_days = [first_day + timedelta(days=n) for n in range((today - first_day).days + 1)]
+    counts = await clicks.count_per_day(str(link["_id"]), all_days)
+
+    # Only the last `days` days are listed; the total still includes the rest.
+    window = list(zip(all_days, counts, strict=True))[-days:]
+    return LinkStats(
+        code=code,
+        total_clicks=sum(counts),
+        days=[DayClicks(day=day, clicks=count) for day, count in window],
+        deleted=link.get("deleted_at") is not None,
+    )
 
 
 @router.delete(

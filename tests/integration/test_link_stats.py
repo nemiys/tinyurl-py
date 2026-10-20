@@ -19,7 +19,7 @@ from tests.integration.test_get_link import register_other_user
 from tinyurl_py.api.dependencies import get_click_store
 from tinyurl_py.events.clicks import ClickEvent
 from tinyurl_py.main import app
-from tinyurl_py.persistence import click_store as click_store_module
+from tinyurl_py.persistence import cassandra as cassandra_module
 from tinyurl_py.persistence.cassandra import close, connect
 from tinyurl_py.persistence.click_store import ClickStore, LazyClickStore
 
@@ -206,7 +206,7 @@ async def test_stats_answer_503_while_cassandra_is_unreachable_and_nothing_else_
     async def broken_connect() -> Any:
         raise OSError("no route to cassandra")
 
-    monkeypatch.setattr(click_store_module, "connect", broken_connect)
+    monkeypatch.setattr(cassandra_module, "connect", broken_connect)
     monkeypatch.setattr(app.state, "clicks", LazyClickStore(), raising=False)
     code, _ = await make_link()
 

@@ -14,6 +14,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pymongo.asynchronous.database import AsyncDatabase
 from redis.asyncio import Redis
 
+from tinyurl_py.persistence.click_store import ClickStore, ClickStoreUnavailable, LazyClickStore
 from tinyurl_py.persistence.mongo import DATABASE_NAME
 from tinyurl_py.security.tokens import InvalidTokenError, decode_access_token
 
@@ -34,6 +35,23 @@ def get_redis(request: Request) -> Redis:
 
 
 RedisClient = Annotated[Redis, Depends(get_redis)]
+
+
+async def get_click_store(request: Request) -> ClickStore:
+    lazy: LazyClickStore = request.app.state.clicks
+    try:
+        return await lazy.get()
+    except ClickStoreUnavailable:
+        # 503 = "temporary problem, try again". Only the endpoints that need
+        # Cassandra ask for this dependency, so only they are affected.
+        raise HTTPException(
+            status_code=503,
+            detail="Statistics are temporarily unavailable",
+            headers={"Retry-After": "5"},
+        ) from None
+
+
+Clicks = Annotated[ClickStore, Depends(get_click_store)]
 
 
 # Reads "Authorization: Bearer <token>". It also adds the Authorize button to

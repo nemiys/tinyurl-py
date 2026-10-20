@@ -22,6 +22,7 @@ DEFAULT_TTL_SECONDS = 3600
 class CachedLink(BaseModel):
     """Just what a redirect needs; not the whole Mongo document."""
 
+    link_id: str  # Mongo _id as text; goes into the click event
     url: str
     mobile_url: str | None
     expires_at: AwareDatetime | None

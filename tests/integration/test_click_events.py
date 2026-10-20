@@ -24,7 +24,8 @@ async def create_link(web: AsyncClient, user: LoggedIn) -> str:
 
 
 async def published_events(redis_client: Redis) -> list[ClickEvent]:
-    entries = await redis_client.xrange(CLICKS_STREAM)
+    # redis-py's type hints for streams are loose, hence the explicit Any.
+    entries: Any = await redis_client.xrange(CLICKS_STREAM)
     return [ClickEvent.model_validate_json(fields["data"]) for _, fields in entries]
 
 

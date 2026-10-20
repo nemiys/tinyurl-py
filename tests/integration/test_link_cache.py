@@ -13,7 +13,10 @@ from tinyurl_py.cache.links import CachedLink, cache_link, get_cached_link
 from tinyurl_py.settings import settings
 
 LINK = CachedLink(
-    url="https://example.com/page", mobile_url="https://m.example.com/", expires_at=None
+    link_id="1",
+    url="https://example.com/page",
+    mobile_url="https://m.example.com/",
+    expires_at=None,
 )
 
 
@@ -32,7 +35,9 @@ async def test_redis_answers_ping(redis_client: Redis) -> None:
 
 async def test_cached_link_comes_back_unchanged(redis_client: Redis) -> None:
     expires_at = datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
-    link = CachedLink(url="https://example.com/", mobile_url=None, expires_at=expires_at)
+    link = CachedLink(
+        link_id="1", url="https://example.com/", mobile_url=None, expires_at=expires_at
+    )
 
     await cache_link(redis_client, "aB3dE9x", link)
 
@@ -52,6 +57,7 @@ async def test_entry_is_stored_with_a_time_limit(redis_client: Redis) -> None:
 
 async def test_entry_does_not_outlive_the_link(redis_client: Redis) -> None:
     soon = CachedLink(
+        link_id="1",
         url="https://example.com/",
         mobile_url=None,
         expires_at=datetime.now(UTC) + timedelta(seconds=120),
@@ -64,6 +70,7 @@ async def test_entry_does_not_outlive_the_link(redis_client: Redis) -> None:
 
 async def test_already_expired_link_is_not_cached(redis_client: Redis) -> None:
     gone = CachedLink(
+        link_id="1",
         url="https://example.com/",
         mobile_url=None,
         expires_at=datetime.now(UTC) - timedelta(seconds=5),

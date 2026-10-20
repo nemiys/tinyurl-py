@@ -26,9 +26,12 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_expire_minutes: int = 60
 
-    # Rate limits (sliding window). Creating links is limited per user.
+    # Rate limits (sliding window). Creating links is limited per user; redirects
+    # per client IP, generously, because an office or school shares one address.
     create_link_limit: int = 20
     create_link_window_seconds: int = 60
+    redirect_limit: int = 120
+    redirect_window_seconds: int = 60
 
     # Name of this worker inside the consumer group. Run several workers by
     # giving each its own name. A restarted worker keeping its name picks up

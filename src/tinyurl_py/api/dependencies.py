@@ -94,22 +94,42 @@ async def get_current_user(
 CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 
 
+def client_ip(request: Request) -> str:
+    """Address of whoever connected to us.
+
+    Deliberately NOT read from the X-Forwarded-For header: anyone can send that
+    header, which would let a client pick a new "address" on every request and
+    walk around the limit. Behind a real proxy, uvicorn can be told which
+    proxies to trust (--forwarded-allow-ips) and then fills this in itself.
+    """
+    return request.client.host if request.client else "unknown"
+
+
+async def enforce_rate_limit(
+    redis: Redis, key: str, *, limit: int, window_seconds: int, detail: str
+) -> None:
+    """Answer 429 (with Retry-After) if `key` has used up its allowance."""
+    result = await RateLimiter(redis).check(key, limit=limit, window_seconds=window_seconds)
+    if not result.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=detail,
+            # Tells a well-behaved client exactly how long to wait.
+            headers={"Retry-After": str(result.retry_after_seconds)},
+        )
+
+
 async def limit_link_creation(user: CurrentUser, redis: RedisClient) -> None:
-    """Refuse with 429 once a user has created too many links recently.
+    """Refuse once a user has created too many links recently.
 
     Runs after the login check (it needs to know who is asking), so a request
     without a valid token is a 401 and never counts. Per user and not per IP
     because people share IP addresses (an office, a home network).
     """
-    result = await RateLimiter(redis).check(
+    await enforce_rate_limit(
+        redis,
         f"create:user:{user['_id']}",
         limit=settings.create_link_limit,
         window_seconds=settings.create_link_window_seconds,
+        detail="Too many links created, please slow down",
     )
-    if not result.allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many links created, please slow down",
-            # Tells a well-behaved client exactly how long to wait.
-            headers={"Retry-After": str(result.retry_after_seconds)},
-        )

@@ -5,11 +5,12 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from tinyurl_py.api.dependencies import Database, RedisClient
+from tinyurl_py.api.dependencies import Database, RedisClient, client_ip, enforce_rate_limit
 from tinyurl_py.cache.links import CachedLink, cache_link, get_cached_link
 from tinyurl_py.domain.codes import is_valid_code
 from tinyurl_py.domain.devices import is_mobile
 from tinyurl_py.events.clicks import ClickEvent, publish_click
+from tinyurl_py.settings import settings
 
 router = APIRouter(tags=["redirect"])
 
@@ -20,6 +21,7 @@ router = APIRouter(tags=["redirect"])
     response_class=RedirectResponse,
     responses={
         404: {"description": "No such link"},
+        429: {"description": "Too many requests from this address; see Retry-After"},
         410: {"description": "The link has expired"},
     },
 )
@@ -34,6 +36,17 @@ async def redirect(
     # that cannot be one of our codes is dismissed before any lookup.
     if not is_valid_code(code):
         raise HTTPException(status_code=404, detail="Link not found")
+
+    # Limited per client IP, after the junk check above: a scanner asking for
+    # /wp-login.php costs us nothing and need not be counted. Unknown but
+    # well-formed codes ARE counted, which is what slows down code guessing.
+    await enforce_rate_limit(
+        redis,
+        f"redirect:ip:{client_ip(request)}",
+        limit=settings.redirect_limit,
+        window_seconds=settings.redirect_window_seconds,
+        detail="Too many requests, please slow down",
+    )
 
     # Cache-aside: ask the cache first; on a miss ask Mongo (the source of
     # truth) and keep the answer for next time.

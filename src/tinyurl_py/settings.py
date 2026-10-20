@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     jwt_secret: str
     jwt_expire_minutes: int = 60
 
+    # Name of this worker inside the consumer group. Run several workers by
+    # giving each its own name. A restarted worker keeping its name picks up
+    # right where it left off.
+    worker_name: str = "worker-1"
+
     # Public address of this service, used to build the short links we return.
     base_url: str = "http://localhost:8001"
 

@@ -17,7 +17,9 @@ KEYSPACE = "tinyurl"
 
 
 async def connect() -> Session:
-    cluster = Cluster([settings.cassandra_host], port=settings.cassandra_port)
+    # Cassandra 5 speaks protocol 5. Without saying so the driver first tries a
+    # newer one, fails, and logs two "downgrading" warnings on every start.
+    cluster = Cluster([settings.cassandra_host], port=settings.cassandra_port, protocol_version=5)
     # Connecting with a keyspace means queries can say `clicks_by_link_day`
     # instead of `tinyurl.clicks_by_link_day`.
     return await asyncio.to_thread(cluster.connect, KEYSPACE)

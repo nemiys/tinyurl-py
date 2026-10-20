@@ -1,76 +1,75 @@
-# tinyurl-py — הנחיות עבודה
+# tinyurl-py
 
-תקשורת איתי בעברית. קוד, שמות, הודעות commit ו-README: באנגלית.
+A URL shortener with **smart links** (a different destination for mobile visitors, an expiry date) and click statistics. A Python rewrite and upgrade of a course project (`nemiys-tinyurl`, Java/Spring).
 
-## מה זה
+The point of the project is to show sound backend fundamentals (REST, auth, uniform errors, tests, CI) and reasoned system design: which data store holds what, where the cache sits, and how recording a click avoids slowing the redirect. Small, clean and documented beats wide and fragile.
 
-פורט ושדרוג של `nemiys-tinyurl` (Java/Spring, קורס HANDSON) לפייתון מודרני, כפרויקט תיק עבודות. שירות קיצור קישורים עם **קישורים חכמים** (חוק יעד לפי מכשיר, ותוקף) וסטטיסטיקת קליקים.
-
-הפרויקט צריך להוכיח: יסודות backend (REST, auth, שגיאות אחידות, בדיקות, CI), החלטות system design מנומקות (מי ה-data store של מה, איפה cache, איך לא מאטים redirect), ושאני **שולט בלוגיקה** ויכול להסביר כל חלק בראיון. עדיף קטן, נקי ומתועד על רחב ושביר.
-
-## ארכיטקטורה
+## Architecture
 
 ```
-לקוח ──► FastAPI ──► Redis (מטמון code→יעד, הגבלת קצב, Stream של קליקים)
-             │              │
-             ▼              ▼
-          MongoDB      worker ──► Cassandra (clicks)
-   (משתמשים, קישורים חכמים)
+client ──► FastAPI ──► Redis (cache code→target, rate limits, click Stream)
+              │              │
+              ▼              ▼
+           MongoDB      worker ──► Cassandra (clicks)
+   (users, smart links)
 ```
 
-- **MongoDB:** משתמשים וקישורים. מקור האמת לקישורים. אינדקס ייחודי על שדה הקוד.
-- **Redis:** מטמון (לא מקור אמת, ולכן לא ערובה לייחודיות), הגבלת קצב (חלון נע), ו-Stream לאירועי קליק.
-- **Cassandra:** טבלת קליקים. מפתח חלוקה `(link_id, יום)`, מפתח מיון `clicked_at, event_id`. כתיבה עם אותו מפתח דורסת, ולכן הודעה שמגיעה פעמיים לא יוצרת כפילות.
-- **Redirect:** חיפוש ב-Redis, ואם אין אז ב-Mongo ומילוי המטמון. תשובת 302. פרסום אירוע הקליק לא חוסם את התשובה.
-- **Worker:** תהליך נפרד. קורא מה-Stream, כותב ל-Cassandra, ומאשר לתור רק אחרי הכתיבה.
+- **MongoDB**: users and links; the source of truth for links. A unique index on the short code guarantees uniqueness.
+- **Redis**: cache (not a source of truth, so never what guarantees uniqueness), sliding-window rate limiting, and a Stream of click events.
+- **Cassandra**: one table of clicks. Partition key `(link_id, day)`, clustering `clicked_at, event_id`. Writing the same key again overwrites, so a message delivered twice does not create a duplicate.
+- **Redirect**: look in Redis, else in Mongo and fill the cache; answer 302. Publishing the click event happens after the response and never blocks it.
+- **Worker**: a separate process. Reads the Stream through a consumer group, writes to Cassandra, and acknowledges only after the write (at-least-once; recovers pending and abandoned messages).
 
-כל החלטה מנומקת ב-`docs/adr/`.
+Every significant decision is explained in `docs/adr/`.
 
-## סטאק ופורטים
+## Stack and ports
 
-Python 3.12, `uv`, FastAPI (async), `pydantic-settings`. מאוחר יותר: `pymongo` אסינכרוני (`AsyncMongoClient`, לא `motor`), `cassandra-driver`, `redis` אסינכרוני, `pwdlib` (argon2), `PyJWT`. בדיקות: `pytest`, `testcontainers`. איכות: `ruff` ו-`mypy`. לא מוסיפים ספרייה בלי הסבר קצר למה.
+Python 3.12, `uv`, FastAPI (async), `pydantic-settings`, `pymongo` async (`AsyncMongoClient`), `cassandra-driver`, `redis` async, `pwdlib` (argon2), `PyJWT`. Tests: `pytest`, `pytest-asyncio`, `httpx`, `pytest-cov`. Quality: `ruff`, `mypy` (strict). A new dependency needs a one-line reason.
 
-פורטים (שונים בכוונה מ-wikiguard-py ומהפרויקט הישן): Redis 6381, Mongo 27018, Cassandra 9043, אפליקציה 8001.
+Host ports (deliberately not the defaults, so it can run next to other projects): Redis 6381, Mongo 27018, Cassandra 9043, API 8001.
 
-## שיטת עבודה
-
-- **תכנית, הסבר, כתיבה.** לפני כל שלב: תכנית קצרה (אילו קבצים ולמה). אחרי כל שלב: סיכום החלטות בשפה פשוטה.
-- **לא מריצים שלב שלם לבד.** קודם התמונה הגדולה של השלב (מה הוא, למה, איך החלקים מתחברים). אחר כך צעד אחד בכל פעם: הסבר מלא, ורק אז כתיבה. מסבירים לפני שכותבים, ולא מבקשים ממני להסביר קוד שלא הוסבר לי.
-- **שאלות הבנה רק בסוף השלב**, אחרי שעברנו על כל הצעדים. באמצע שואלים רק "ברור? משהו לא ברור?".
-- **בשאלות רב-ברירה התשובה הנכונה לא תהיה תמיד ראשונה.** מערבבים את הסדר. שואלים על הרעיון המרכזי של הצעד ולא על פרטי מימוש. אם אמרתי "לא הסברת על זה", מסבירים שוב ולא שואלים שוב.
-- **בדיקות מוצגות בטבלה אחת**: איזו בדיקה ומה המטרה שלה. לא מפרטים איך כל בדיקה כתובה, אלא אם נמי מבקש. את קוד היישום ממשיכים להסביר במלואו.
-- **סיכום שלב:** בעברית פשוטה ומשפטים קצרים, במבנה קבוע: מה היה לפני ואחרי, מה אפשר לעשות עכשיו (כפעולות קונקרטיות), איך זה עובד מאחורי הקלעים (נקודות קצרות במילים יומיומיות), תקלה שנתפסה בדרך (אם הייתה), מה עדיין לא קיים, ושורת מספרים. בלי טבלאות צפופות של מונחים.
-- **עברית פשוטה.** מעט אנגלית באמצע משפט (היא מבלבלת בכיוון הכתיבה). מונח באנגלית שחייבים: בסוגריים או בשורה נפרדת.
-- חלקים המסומנים 🧠 הם הליבה (יצירת קוד קצר, אירועי קליק ו-worker, הגבלת קצב). את הקוד כותב Claude, בחתיכות קטנות עם הסבר לכל פונקציה, ובהם מקדישים הסבר ובדיקת הבנה מורחבים. נמי מחליט בכל צומת החלטה. ההצעה שנמי יכתוב חלק בעצמו נשארת פתוחה, אבל לא מניחים שהוא הסכים לה.
-- נקודות החלטה חדשות: עוצרים ושואלים אותי, לא מחליטים לבד.
-- בדיקה לכל באג, לפני התיקון.
-- commit קטן לכל צעד לוגי: `feat:` / `fix:` / `test:` / `docs:` / `chore:` / `ci:`. **בלי** טריילר `Co-Authored-By` ובלי אזכור AI בהיסטוריה.
-- אין סודות בקוד או בהיסטוריה. `.env.example` בלבד.
-- בסוף כל שלב (אחרי הסיכום ושאלות ההבנה, ולפני המעבר לשלב הבא): דוחפים לריפו הפרטי ובודקים שה-CI ירוק. אישור קבוע מנמי. אחרת לא דוחפים.
-- לא יוצרים ריפו ב-GitHub ולא הופכים לציבורי בלי אישור מפורש. לפני הפיכה לציבורי: סריקת היסטוריה לסודות.
-
-## שלבים
-
-0. שלד: uv, הגדרות, Compose, `/health`, CI בסיסי.
-1. מודל נתונים: אוספי Mongo ואינדקסים, טבלת Cassandra.
-2. הרשמה, התחברות ו-JWT.
-3. 🧠 יצירת קישור והעברה עם מטמון.
-4. רשימת קישורים: סינון, מיון, `limit`/`offset` (ברירת מחדל 20, מקסימום 100).
-5. 🧠 אירועי קליק: פרסום, worker, כתיבה בטוחה להרצה חוזרת, סטטיסטיקות.
-6. 🧠 הגבלת קצב.
-7. שגיאות אחידות, בדיקת כתובות (http/https, אורך, חסימת כתובות פנימיות), חוקי יעד.
-8. בדיקות אינטגרציה, כיסוי, CI מלא.
-9. README, תרשים, ADR, הרצה חיה (אופציונלי).
-
-## ההישג הנדרש
-
-`docker compose up` מרים הכול. זרימה מלאה עובדת: הרשמה, יצירת קישור, לחיצה, והלחיצה מופיעה בסטטיסטיקה. מכבים את ה-worker, לוחצים 10 פעמים, מדליקים: בדיוק 10 קליקים. עודף בקשות מחזיר 429 וכתובת פנימית נדחית. CI ירוק. אני מסביר בעל פה כל ADR.
-
-## הרצה מקומית
+## Layout
 
 ```
-docker compose up -d --wait
+src/tinyurl_py/
+  api/          routers, schemas, dependencies, error handlers
+  domain/       pure logic: codes, device detection, destination rules
+  security/     passwords, tokens, rate limiter
+  cache/        the Redis link cache
+  events/       click event model and publishing
+  persistence/  Mongo, Redis, Cassandra connections and the click store
+  worker/       the Stream consumer and its entry point
+cassandra/      schema.cql, applied by the cassandra-init service
+docs/adr/       architecture decision records
+tests/          unit/ and integration/ (integration needs docker compose)
+```
+
+## Run locally
+
+```
+docker compose up -d --wait        # Redis, Mongo, Cassandra
 uv sync
-uv run pytest
+uv run pytest --cov                # needs the services above
 uv run uvicorn tinyurl_py.main:app --port 8001
+uv run python -m tinyurl_py.worker # counts the clicks
 ```
+
+Configuration is read from environment variables or a git-ignored `.env`; copy `.env.example` and set `JWT_SECRET`.
+
+## Conventions
+
+- Conventional commit prefixes: `feat:` `fix:` `test:` `docs:` `chore:` `ci:`; one small commit per logical step.
+- New behaviour starts with a failing test, committed before the code. A bug starts with a test that reproduces it.
+- No secrets in code or history; `.env.example` only.
+- Errors always have the shape `{"error": {"code", "message", "details"?}}`.
+- `ruff check`, `ruff format --check`, `mypy src tests` and the tests (coverage at least 95%) must pass; CI runs all of them.
+- Code and comments in English.
+
+## Known temporary workarounds
+
+- `pyasyncore` is installed because `cassandra-driver` 3.30.1 still imports the `asyncore` module that Python 3.12 removed. Remove it when the driver stops needing it.
+- CI is pinned to `ubuntu-22.04`: MongoDB refuses to start on Linux kernels 6.19 to 7.0.13, which `ubuntu-latest` moved to. Revisit when MongoDB or the runner image is fixed.
+
+## Acceptance
+
+`docker compose up` brings everything up. The full flow works: register, create a link, click it, see the click in the statistics. Stop the worker, click 10 times, start it: exactly 10 clicks. Too many requests answer 429, and an internal address is refused. CI is green.

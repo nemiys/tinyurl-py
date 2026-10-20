@@ -39,7 +39,7 @@ async def redirect(
     # truth) and keep the answer for next time.
     link = await get_cached_link(redis, code)
     if link is None:
-        document = await db.links.find_one({"code": code})
+        document = await db.links.find_one({"code": code, "deleted_at": None})
         if document is None:
             raise HTTPException(status_code=404, detail="Link not found")
         link = CachedLink(

@@ -54,6 +54,8 @@ async def create_link(body: CreateLinkRequest, user: CurrentUser, db: Database) 
         "mobile_url": str(body.mobile_url) if body.mobile_url is not None else None,
         "expires_at": body.expires_at,
         "created_at": created_at,
+        # None = alive. Deleting sets the time instead of removing the row.
+        "deleted_at": None,
     }
 
     for _ in range(MAX_CODE_ATTEMPTS):
@@ -92,7 +94,7 @@ async def list_links(
 ) -> LinkPage:
     # `Literal` is a closed list: any other value is a 422, so nobody can
     # smuggle an arbitrary word into the query.
-    query: dict[str, Any] = {"owner_id": user["_id"]}
+    query: dict[str, Any] = {"owner_id": user["_id"], "deleted_at": None}
     now = datetime.now(UTC)
     if status == "active":
         # No expiry date at all also means "still active".
@@ -130,7 +132,7 @@ async def get_link(code: str, user: CurrentUser, db: Database) -> LinkPublic:
     # Filtering by owner in the query itself means a stranger's link is simply
     # "not found": the answer is identical to an unknown code, so nobody can
     # use this endpoint to discover which codes exist.
-    link = await db.links.find_one({"code": code, "owner_id": user["_id"]})
+    link = await db.links.find_one({"code": code, "owner_id": user["_id"], "deleted_at": None})
     if link is None:
         raise HTTPException(status_code=404, detail="Link not found")
     return to_public(link)
@@ -145,10 +147,18 @@ async def get_link(code: str, user: CurrentUser, db: Database) -> LinkPublic:
     },
 )
 async def delete_link(code: str, user: CurrentUser, db: Database, redis: RedisClient) -> None:
+    # Soft delete: the row stays, marked with the time. That keeps the link's
+    # statistics reachable and keeps its code taken (the unique index still
+    # sees it), so the code can never be handed to a new link.
+    # `"deleted_at": None` also skips links that were already deleted.
+    #
     # Mongo first: it is the source of truth. Had we cleared the cache first, a
     # click arriving in between would copy the link back into it.
-    result = await db.links.delete_one({"code": code, "owner_id": user["_id"]})
-    if result.deleted_count == 0:
+    result = await db.links.update_one(
+        {"code": code, "owner_id": user["_id"], "deleted_at": None},
+        {"$set": {"deleted_at": datetime.now(UTC)}},
+    )
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Link not found")
 
     # Without this the deleted link would keep redirecting until its cached

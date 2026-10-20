@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 from redis.asyncio import Redis
+from redis.exceptions import ResponseError
 
 from tinyurl_py.events.clicks import CLICKS_STREAM, ClickEvent, publish_click
 from tinyurl_py.persistence.click_store import ClickStore
@@ -211,3 +212,30 @@ async def test_clicks_reach_cassandra_and_a_duplicate_is_not_counted_twice(
     rows = await asyncio.to_thread(session.execute, SELECT_DAY, (link_id, today))
     assert len(list(rows)) == 2  # three messages, two distinct clicks
     await asyncio.to_thread(session.execute, DELETE_DAY, (link_id, today))
+
+
+async def test_a_message_deleted_while_pending_is_cleared_not_retried_forever(
+    redis_client: Redis,
+) -> None:
+    crashed = await make_consumer(redis_client, FakeStore(failures=1), name="worker-1")
+    await publish_click(redis_client, new_event())
+    with pytest.raises(RuntimeError):
+        await crashed.run_once()
+    entries: Any = await redis_client.xrange(CLICKS_STREAM)
+    await redis_client.xdel(CLICKS_STREAM, entries[0][0])  # gone, but still on the pending list
+
+    store = FakeStore()
+    restarted = await make_consumer(redis_client, store, name="worker-1")
+    await restarted.run_once()
+
+    assert store.saved == []  # nothing left to save
+    assert await pending_count(redis_client) == 0  # and it no longer waits forever
+
+
+async def test_setup_fails_loudly_on_a_real_problem(redis_client: Redis) -> None:
+    # Only "group already exists" is harmless. A key of the wrong type is not.
+    await redis_client.set(CLICKS_STREAM, "not a stream")
+    consumer = ClickConsumer(redis_client, FakeStore(), "worker-1")
+
+    with pytest.raises(ResponseError):
+        await consumer.setup()

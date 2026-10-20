@@ -110,3 +110,14 @@ async def test_a_link_to_the_service_itself_is_refused(monkeypatch: pytest.Monke
 
     assert await check_destination("sho.rt") is not None
     assert await check_destination("sho.rt.evil.com") is None  # merely looks similar
+
+
+async def test_resolve_host_returns_the_addresses_of_a_name() -> None:
+    addresses = await urls.resolve_host("localhost")
+
+    assert {"127.0.0.1", "::1"} & set(addresses)
+
+
+async def test_resolve_host_raises_for_a_name_that_does_not_exist() -> None:
+    with pytest.raises(OSError):
+        await urls.resolve_host("no-such-name.invalid")  # .invalid never resolves

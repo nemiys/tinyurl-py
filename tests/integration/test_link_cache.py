@@ -88,3 +88,10 @@ async def test_a_dead_redis_never_breaks_the_caller() -> None:
     await cache_link(dead, "aB3dE9x", LINK)  # silently skipped
 
     await dead.aclose()
+
+
+async def test_an_unreadable_cache_entry_is_treated_as_a_miss(redis_client: Redis) -> None:
+    # e.g. left over from an older version of the app
+    await redis_client.set("link:aB3dE9x", "not json at all")
+
+    assert await get_cached_link(redis_client, "aB3dE9x") is None

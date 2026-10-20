@@ -1,5 +1,6 @@
 """The API connects to Cassandra on first use, not at startup. Needs Cassandra."""
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -52,3 +53,24 @@ async def test_an_unreachable_cassandra_is_reported_and_retried_next_time(
 
 async def test_closing_something_never_opened_is_harmless() -> None:
     await LazyClickStore().close()
+
+
+async def test_simultaneous_first_requests_open_only_one_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_connect = cassandra_module.connect
+    calls = 0
+
+    async def counting_connect() -> Any:
+        nonlocal calls
+        calls += 1
+        return await real_connect()
+
+    monkeypatch.setattr(cassandra_module, "connect", counting_connect)
+    lazy = LazyClickStore()
+
+    stores = await asyncio.gather(lazy.get(), lazy.get(), lazy.get())
+
+    assert calls == 1  # the others waited for the first and reused its connection
+    assert stores[0] is stores[1] is stores[2]
+    await lazy.close()

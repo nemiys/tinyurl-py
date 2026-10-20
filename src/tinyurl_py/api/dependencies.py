@@ -16,7 +16,9 @@ from redis.asyncio import Redis
 
 from tinyurl_py.persistence.click_store import ClickStore, ClickStoreUnavailable, LazyClickStore
 from tinyurl_py.persistence.mongo import DATABASE_NAME
+from tinyurl_py.security.rate_limit import RateLimiter
 from tinyurl_py.security.tokens import InvalidTokenError, decode_access_token
+from tinyurl_py.settings import settings
 
 
 def get_db(request: Request) -> AsyncDatabase[dict[str, Any]]:
@@ -90,3 +92,24 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
+
+
+async def limit_link_creation(user: CurrentUser, redis: RedisClient) -> None:
+    """Refuse with 429 once a user has created too many links recently.
+
+    Runs after the login check (it needs to know who is asking), so a request
+    without a valid token is a 401 and never counts. Per user and not per IP
+    because people share IP addresses (an office, a home network).
+    """
+    result = await RateLimiter(redis).check(
+        f"create:user:{user['_id']}",
+        limit=settings.create_link_limit,
+        window_seconds=settings.create_link_window_seconds,
+    )
+    if not result.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many links created, please slow down",
+            # Tells a well-behaved client exactly how long to wait.
+            headers={"Retry-After": str(result.retry_after_seconds)},
+        )

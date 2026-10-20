@@ -3,11 +3,17 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
-from tinyurl_py.api.dependencies import Clicks, CurrentUser, Database, RedisClient
+from tinyurl_py.api.dependencies import (
+    Clicks,
+    CurrentUser,
+    Database,
+    RedisClient,
+    limit_link_creation,
+)
 from tinyurl_py.api.schemas import CreateLinkRequest, DayClicks, LinkPage, LinkPublic, LinkStats
 from tinyurl_py.cache.links import delete_cached_link
 from tinyurl_py.domain.codes import generate_code
@@ -44,8 +50,10 @@ def to_public(link: dict[str, Any]) -> LinkPublic:
     "",
     status_code=201,
     response_model=LinkPublic,
+    dependencies=[Depends(limit_link_creation)],
     responses={
         401: {"description": "Missing, invalid or expired token"},
+        429: {"description": "Too many links created recently; see Retry-After"},
         503: {"description": "No free short code was found; try again"},
     },
 )

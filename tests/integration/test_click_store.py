@@ -112,3 +112,17 @@ async def test_a_failed_write_is_not_swallowed() -> None:
 
     with pytest.raises(RuntimeError):
         await store.save(click("abc", at(1)))
+
+
+async def test_clicks_are_counted_per_day(store: ClickStore, link_id: str) -> None:
+    for _ in range(3):
+        await store.save(click(link_id, at(1)))
+    await store.save(click(link_id, at(2)))
+
+    counts = await store.count_per_day(link_id, [datetime.date(2026, 1, d) for d in (1, 2, 3)])
+
+    assert counts == [3, 1, 0]  # same order as the days asked for; an empty day is 0
+
+
+async def test_counting_no_days_is_empty(store: ClickStore, link_id: str) -> None:
+    assert await store.count_per_day(link_id, []) == []

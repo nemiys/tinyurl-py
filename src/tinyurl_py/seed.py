@@ -4,11 +4,14 @@ not an empty page.
     uv run python -m tinyurl_py.seed
     docker compose exec api python -m tinyurl_py.seed
 
-Safe to run again: it first removes the demo user's previous links and clicks,
-then creates them anew. The numbers are the same every time (fixed random seed).
-The codes are fixed too, so documentation can point at them.
+To remove the demo data and nothing else:  python -m tinyurl_py.seed --remove
+
+Safe to run again: it first removes the demo user's previous links and clicks
+(on every day, not only today), then creates them anew. The numbers are the
+same every time (fixed random seed). The codes are fixed too, so documentation can point at them.
 """
 
+import argparse
 import asyncio
 import random
 import uuid
@@ -81,7 +84,11 @@ class SeedResult:
     clicks: dict[str, int]  # code -> how many clicks were written
 
 
-async def _remove_previous_demo_data(db: AsyncDatabase[dict[str, Any]], session: Any) -> None:
+async def remove_demo_data(db: AsyncDatabase[dict[str, Any]], session: Any) -> None:
+    """Delete the demo user, their links and every click of those links.
+
+    Works from the links in Mongo, so it must run while they still exist: once
+    they are gone, nothing says which Cassandra rows belonged to them."""
     user = await db.users.find_one({"email": DEMO_EMAIL})
     if user is None:
         return
@@ -141,7 +148,7 @@ async def _save_all(store: ClickStore, events: list[ClickEvent]) -> None:
 
 async def seed_demo_data(db: AsyncDatabase[dict[str, Any]], session: Any) -> SeedResult:
     """(Re)create the demo user, links and clicks in the given databases."""
-    await _remove_previous_demo_data(db, session)
+    await remove_demo_data(db, session)
 
     now = datetime.now(UTC)
     created_at = now - timedelta(days=HISTORY_DAYS)
@@ -182,16 +189,23 @@ async def seed_demo_data(db: AsyncDatabase[dict[str, Any]], session: Any) -> See
     return SeedResult(user_id=str(user.inserted_id), link_ids=link_ids, clicks=clicks)
 
 
-async def main() -> None:
+async def main(remove: bool = False) -> None:
     mongo = create_client()
     db = mongo[settings.mongo_database]
     await ensure_indexes(db)
     session = await cassandra.connect()
     try:
-        result = await seed_demo_data(db, session)
+        if remove:
+            await remove_demo_data(db, session)
+        else:
+            result = await seed_demo_data(db, session)
     finally:
         await cassandra.close(session)
         await mongo.close()
+
+    if remove:
+        print("Demo data removed.")
+        return
 
     print("Demo data is ready.\n")
     print(f"  Log in with   {DEMO_EMAIL}  /  {DEMO_PASSWORD}   (POST /auth/login, then Authorize)")
@@ -204,4 +218,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    parser = argparse.ArgumentParser(description="Create (or remove) the demo data.")
+    parser.add_argument("--remove", action="store_true", help="remove the demo data and exit")
+    asyncio.run(main(remove=parser.parse_args().remove))

@@ -127,10 +127,15 @@ async def click_store(
 ) -> AsyncIterator[ClickStore]:
     store = await ClickStore.create(cassandra_session)
     yield store
-    for link_id in touched_links:
-        for back in range(60):
-            day = TODAY - timedelta(days=back)
-            await asyncio.to_thread(cassandra_session.execute, DELETE_DAY, (link_id, day))
+    await asyncio.gather(
+        *(
+            asyncio.to_thread(
+                cassandra_session.execute, DELETE_DAY, (link_id, TODAY - timedelta(days=back))
+            )
+            for link_id in touched_links
+            for back in range(60)
+        )
+    )
 
 
 @pytest.fixture

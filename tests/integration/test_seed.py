@@ -2,18 +2,21 @@
 
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
 from pymongo.asynchronous.database import AsyncDatabase
 
-from tests.integration.conftest import TODAY
+from tests.integration.conftest import TEST_DATABASE, TODAY
 from tests.integration.test_redirect import DESKTOP, PHONE
 from tinyurl_py.seed import (
     DEMO_EMAIL,
     DEMO_LINKS,
     DEMO_PASSWORD,
     HISTORY_DAYS,
+    main,
     seed_demo_data,
 )
+from tinyurl_py.settings import settings
 
 
 async def log_in(http: AsyncClient) -> dict[str, str]:
@@ -92,3 +95,20 @@ async def test_running_it_again_resets_instead_of_duplicating(
     assert await db.users.count_documents({"email": DEMO_EMAIL}) == 1
     assert stats["total_clicks"] == second.clicks[DEMO_LINKS[0].code]  # the old clicks are gone
     assert second.clicks == first.clicks  # and the numbers are the same every time
+
+
+async def test_the_command_tells_the_user_how_to_log_in_and_which_links_exist(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    db: AsyncDatabase[dict[str, Any]],
+    touched_links: list[str],
+) -> None:
+    monkeypatch.setattr(settings, "mongo_database", TEST_DATABASE)  # not the real data
+
+    await main()
+
+    printed = capsys.readouterr().out
+    assert DEMO_EMAIL in printed
+    assert DEMO_PASSWORD in printed
+    assert all(link.code in printed for link in DEMO_LINKS)
+    touched_links.extend([str(link["_id"]) async for link in db.links.find({})])

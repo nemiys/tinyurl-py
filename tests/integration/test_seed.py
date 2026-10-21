@@ -1,5 +1,7 @@
 """The demo data script. Needs Mongo, Redis and Cassandra from docker-compose.yml."""
 
+import asyncio
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -14,6 +16,7 @@ from tinyurl_py.seed import (
     DEMO_PASSWORD,
     HISTORY_DAYS,
     main,
+    remove_demo_data,
     seed_demo_data,
 )
 from tinyurl_py.settings import settings
@@ -112,3 +115,43 @@ async def test_the_command_tells_the_user_how_to_log_in_and_which_links_exist(
     assert DEMO_PASSWORD in printed
     assert all(link.code in printed for link in DEMO_LINKS)
     touched_links.extend([str(link["_id"]) async for link in db.links.find({})])
+
+
+async def test_removing_the_demo_data_leaves_nothing_behind_on_any_day(
+    db: AsyncDatabase[dict[str, Any]],
+    cassandra_session: Any,
+    touched_links: list[str],
+) -> None:
+    result = await seed_demo_data(db, cassandra_session)
+    touched_links.extend(result.link_ids.values())
+
+    await remove_demo_data(db, cassandra_session)
+
+    assert await db.users.count_documents({}) == 0
+    assert await db.links.count_documents({}) == 0
+    for link_id in result.link_ids.values():
+        for back in range(HISTORY_DAYS + 1):  # every day, not just today
+            day = TODAY - timedelta(days=back)
+            rows = await asyncio.to_thread(
+                cassandra_session.execute,
+                "SELECT event_id FROM clicks_by_link_day WHERE link_id = %s AND day = %s",
+                (link_id, day),
+            )
+            assert list(rows) == []
+
+
+async def test_the_remove_option_clears_the_demo_data_and_says_so(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    db: AsyncDatabase[dict[str, Any]],
+    cassandra_session: Any,
+    touched_links: list[str],
+) -> None:
+    monkeypatch.setattr(settings, "mongo_database", TEST_DATABASE)
+    result = await seed_demo_data(db, cassandra_session)
+    touched_links.extend(result.link_ids.values())
+
+    await main(remove=True)
+
+    assert "removed" in capsys.readouterr().out
+    assert await db.users.count_documents({}) == 0

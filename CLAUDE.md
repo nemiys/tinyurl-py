@@ -46,15 +46,23 @@ tests/          unit/ and integration/ (integration needs docker compose)
 
 ## Run locally
 
+Everything in containers (the API at http://localhost:8001/docs, plus the worker that counts clicks):
+
 ```
-docker compose up -d --wait        # Redis, Mongo, Cassandra
-uv sync
-uv run pytest --cov                # needs the services above
-uv run uvicorn tinyurl_py.main:app --port 8001
-uv run python -m tinyurl_py.worker # counts the clicks
+docker compose up --build
 ```
 
-Configuration is read from environment variables or a git-ignored `.env`; copy `.env.example` and set `JWT_SECRET`.
+For development, with the databases in containers and the code on your machine:
+
+```
+docker compose up -d --wait redis mongo cassandra cassandra-init
+uv sync
+uv run pytest --cov
+uv run uvicorn tinyurl_py.main:app --port 8001
+uv run python -m tinyurl_py.worker
+```
+
+Configuration is read from environment variables or a git-ignored `.env`; copy `.env.example` and set `JWT_SECRET`. Inside Docker, a random `JWT_SECRET` is generated per run when none is given (logins end on restart).
 
 ## Conventions
 

@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     mongo_database: str = "tinyurl"
     cassandra_host: str = "localhost"
     cassandra_port: int = 9043
+    # Name of the Cassandra data center this app talks to ("datacenter1" is what a
+    # fresh single-node Cassandra calls itself).
+    cassandra_local_dc: str = "datacenter1"
 
     # Signs every login token, so whoever holds it can forge a token for any
     # user. Deliberately has NO default: the app refuses to start without one,

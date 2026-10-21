@@ -8,7 +8,8 @@ handling other requests. Simple, and plenty for our volume.
 
 import asyncio
 
-from cassandra.cluster import Cluster, Session
+from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile, Session
+from cassandra.policies import DCAwareRoundRobinPolicy
 
 from tinyurl_py.settings import settings
 
@@ -19,7 +20,17 @@ KEYSPACE = "tinyurl"
 async def connect() -> Session:
     # Cassandra 5 speaks protocol 5. Without saying so the driver first tries a
     # newer one, fails, and logs two "downgrading" warnings on every start.
-    cluster = Cluster([settings.cassandra_host], port=settings.cassandra_port, protocol_version=5)
+    cluster = Cluster(
+        [settings.cassandra_host],
+        port=settings.cassandra_port,
+        protocol_version=5,
+        # Said explicitly: otherwise the driver guesses and warns about it.
+        execution_profiles={
+            EXEC_PROFILE_DEFAULT: ExecutionProfile(
+                load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=settings.cassandra_local_dc)
+            )
+        },
+    )
     # Connecting with a keyspace means queries can say `clicks_by_link_day`
     # instead of `tinyurl.clicks_by_link_day`.
     return await asyncio.to_thread(cluster.connect, KEYSPACE)

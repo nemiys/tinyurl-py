@@ -1,3 +1,13 @@
+# Two ways to use this file:
+#
+#   docker compose up --build
+#       everything: the three databases, the API (http://localhost:8001/docs)
+#       and the worker that counts clicks.
+#
+#   docker compose up -d --wait redis mongo cassandra cassandra-init
+#       only the databases, for developing and running the tests on your own
+#       machine (uv run pytest, uv run uvicorn ...).
+
 services:
   redis:
     image: redis:7
@@ -55,6 +65,59 @@ services:
     # normal port, not the host-mapped 9043.
     command: ["cqlsh", "cassandra", "9042", "-f", "/schema.cql"]
     restart: "no"
+
+  # --- The application ---------------------------------------------------------
+  # One image, two commands (see Dockerfile). Inside the compose network the other
+  # services are reached by name and by their normal ports, not by the ports
+  # mapped to your machine above.
+  api:
+    build: .
+    image: tinyurl-py
+    container_name: tinyurl-py-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment: &app-environment
+      REDIS_URL: redis://redis:6379
+      MONGO_URL: mongodb://mongo:27017
+      CASSANDRA_HOST: cassandra
+      CASSANDRA_PORT: "9042"
+      BASE_URL: ${BASE_URL:-http://localhost:8001}
+      # Empty means "make a random one for this run" (docker/entrypoint.sh).
+      # Set it in a .env file next to this one to keep logins across restarts.
+      JWT_SECRET: ${JWT_SECRET:-}
+    # No Cassandra here on purpose: the API only needs it for statistics and
+    # connects to it on first use, so redirects work even while it is starting.
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Counts the clicks. Stop it (`docker compose stop worker`), click some links,
+  # start it again (`docker compose start worker`): nothing is lost.
+  worker:
+    build: .
+    image: tinyurl-py
+    container_name: tinyurl-py-worker
+    restart: unless-stopped
+    command: ["python", "-m", "tinyurl_py.worker"]
+    environment: *app-environment
+    depends_on:
+      redis:
+        condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
 
 volumes:
   mongo-data:

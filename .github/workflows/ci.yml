@@ -40,7 +40,7 @@ jobs:
       # docker-compose.yml we use locally, so CI and laptop never drift apart.
       # `--wait` returns once every service reports healthy.
       - name: Start services
-        run: docker compose up -d --wait
+        run: docker compose up -d --wait redis mongo cassandra cassandra-init
 
       - name: Lint
         run: uv run ruff check .

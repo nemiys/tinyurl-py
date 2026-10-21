@@ -99,12 +99,6 @@ DELETE_DAY = "DELETE FROM clicks_by_link_day WHERE link_id = %s AND day = %s"
 TODAY = datetime.now(UTC).date()
 
 
-@pytest.fixture
-def touched_links() -> list[str]:
-    """Links that got clicks in Cassandra, so the fixture below can clean up."""
-    return []
-
-
 @pytest.fixture(scope="session")
 def cassandra_session() -> Iterator[Any]:
     """One Cassandra connection for the whole test run: connecting takes over a
@@ -122,20 +116,28 @@ def session(cassandra_session: Any) -> Any:
 
 
 @pytest.fixture
-async def click_store(
-    cassandra_session: Any, touched_links: list[str]
-) -> AsyncIterator[ClickStore]:
-    store = await ClickStore.create(cassandra_session)
-    yield store
+async def touched_links(cassandra_session: Any) -> AsyncIterator[list[str]]:
+    """A test adds the link ids it wrote clicks for; their clicks are deleted when
+    the test ends. Without this the tests would leave rows behind in the real
+    local Cassandra, which a test must never do."""
+    touched: list[str] = []
+    yield touched
     await asyncio.gather(
         *(
             asyncio.to_thread(
                 cassandra_session.execute, DELETE_DAY, (link_id, TODAY - timedelta(days=back))
             )
-            for link_id in touched_links
+            for link_id in touched
             for back in range(60)
         )
     )
+
+
+@pytest.fixture
+async def click_store(cassandra_session: Any, touched_links: list[str]) -> ClickStore:
+    # `touched_links` is requested only so its cleanup also runs for tests that
+    # use the store and nothing else.
+    return await ClickStore.create(cassandra_session)
 
 
 @pytest.fixture

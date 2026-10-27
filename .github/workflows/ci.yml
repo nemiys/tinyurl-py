@@ -55,6 +55,15 @@ jobs:
       - name: Tests with coverage
         run: uv run pytest --cov
 
+      # The image as a visitor builds it: API and worker in containers, talking
+      # to the databases by service name. No JWT_SECRET here, so this also covers
+      # the entrypoint making one. `--wait` returns once the API is healthy.
+      - name: Build and start the app containers
+        run: docker compose up -d --build --wait api worker
+
+      - name: Smoke test the containers
+        run: bash scripts/smoke_test.sh
+
       - name: Coverage summary
         if: always()
         run: uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"

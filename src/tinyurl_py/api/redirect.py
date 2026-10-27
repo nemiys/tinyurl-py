@@ -15,6 +15,10 @@ from tinyurl_py.settings import settings
 router = APIRouter(tags=["redirect"])
 
 
+# HEAD is what link checkers and chat previews send to see where a link leads.
+# FastAPI does not add it to a GET route by itself, so without this they get 405.
+# Left out of the API docs: the same operation twice would clash there.
+@router.head("/{code}", status_code=302, response_class=RedirectResponse, include_in_schema=False)
 @router.get(
     "/{code}",
     status_code=302,
@@ -72,10 +76,13 @@ async def redirect(
     wants_mobile = link.mobile_url is not None and on_mobile
     target = link.mobile_url if wants_mobile and link.mobile_url else link.url
 
-    # Runs after the response has been sent, so counting the click never makes
-    # the visitor wait.
-    event = ClickEvent.new(link_id=link.link_id, device="mobile" if on_mobile else "desktop")
-    background_tasks.add_task(publish_click, redis, event)
+    # Only a GET is a visit. A HEAD only asks where the link leads (a chat app
+    # may send several for one pasted link), so it is never counted.
+    if request.method == "GET":
+        # Runs after the response has been sent, so counting the click never
+        # makes the visitor wait.
+        event = ClickEvent.new(link_id=link.link_id, device="mobile" if on_mobile else "desktop")
+        background_tasks.add_task(publish_click, redis, event)
 
     # 302 (not 301) so every click comes back through us. "no-store" stops
     # browsers and proxies from remembering the redirect.

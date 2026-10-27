@@ -4,13 +4,15 @@ import asyncio
 import logging
 import signal
 
+from tinyurl_py.logs import configure_logging
 from tinyurl_py.persistence.cassandra import close, connect
 from tinyurl_py.persistence.click_store import ClickStore
 from tinyurl_py.persistence.redis_client import create_redis
 from tinyurl_py.settings import settings
 from tinyurl_py.worker.consumer import ClickConsumer
 
-logger = logging.getLogger(__name__)
+# Named explicitly: run as a program, __name__ is "__main__", which says nothing in a log line.
+logger = logging.getLogger("tinyurl_py.worker")
 
 
 async def main() -> None:
@@ -40,7 +42,7 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
     try:
         asyncio.run(main())
     except KeyboardInterrupt:

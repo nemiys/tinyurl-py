@@ -12,6 +12,7 @@ from tinyurl_py.api.errors import install_error_handlers
 from tinyurl_py.api.links import router as links_router
 from tinyurl_py.api.redirect import router as redirect_router
 from tinyurl_py.api.users import router as users_router
+from tinyurl_py.logs import configure_logging
 from tinyurl_py.persistence.click_store import LazyClickStore
 from tinyurl_py.persistence.mongo import create_client, ensure_indexes
 from tinyurl_py.persistence.redis_client import create_redis
@@ -23,6 +24,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Runs once when the app starts (before `yield`) and once when it stops
     # (after `yield`). The Mongo client is created here a single time and
     # parked on `app.state`, so every request can reach it.
+    # Here and not at import time, so importing the app (as tests do) leaves
+    # logging alone.
+    configure_logging()
     app.state.mongo = create_client()
     # If Mongo is unreachable this raises and the app refuses to start: better
     # than running without the unique indexes that protect our data.

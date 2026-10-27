@@ -2,21 +2,10 @@
 
 import io
 import logging
-from collections.abc import Iterator
-
-import pytest
 
 from tinyurl_py.logs import HANDLER_NAME, configure_logging
 
-
-@pytest.fixture(autouse=True)
-def restore_root_logger() -> Iterator[None]:
-    """Leave the root logger exactly as the test found it."""
-    root = logging.getLogger()
-    level, handlers = root.level, list(root.handlers)
-    yield
-    root.handlers[:] = handlers
-    root.setLevel(level)
+# The root logger is restored after every test (tests/conftest.py).
 
 
 def test_a_warning_shows_its_time_level_and_source() -> None:

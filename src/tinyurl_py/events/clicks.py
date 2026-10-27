@@ -26,7 +26,7 @@ class ClickEvent(BaseModel):
     # worker writes the same Cassandra key and the second write overwrites the
     # first instead of counting a second click.
     event_id: UUID
-    link_id: str  # the link's Mongo _id, not its public (reusable) code
+    link_id: str  # the link's Mongo _id (its permanent identity), not its public code
     clicked_at: AwareDatetime
     device: Literal["mobile", "desktop"] = Field(examples=["mobile"])
 

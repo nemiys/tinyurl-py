@@ -27,7 +27,9 @@ it. Verification names the allowed algorithm itself instead of trusting the
 token's header (the classic "alg" attack) and requires `exp` and `sub`.
 `JWT_SECRET` has no default value: the application refuses to start without one,
 because a key that anyone reading the repository knows would let anyone forge
-logins. Every request also checks that the user still exists, so the token of a
+logins. It must also be at least 32 characters (256 bits, the key size HS256
+calls for); an empty or short value stops the start just the same, rather than
+letting the app run and fail on every login. Every request also checks that the user still exists, so the token of a
 deleted account stops working at once.
 
 **Authorisation** is part of the query, not a check after it: link lookups filter

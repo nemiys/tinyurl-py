@@ -36,7 +36,7 @@ Cassandra holds clicks in one table, `clicks_by_link_day`:
   time and keep a small daily summary table forever.
 - **Daily summary table, written by the worker**: makes totals cheap, but
   needs its own idempotency story. Deferred until reading many days becomes
-  slow.
+  slow; see Consequences for what that costs today and how it would be added.
 - **MongoDB for clicks**: possible at this size, but one document per click
   with a constant write stream is the workload Cassandra is built for, and
   the project is meant to show each store used for what it is good at.
@@ -49,3 +49,17 @@ The table only answers the question it was designed for. Any new question
 (for example by country or by hour across all links) means a new table, not a
 new `WHERE`. The table grows without bound until a summary table or a TTL is
 introduced. At this project's volume that is acceptable.
+
+**Statistics get slower as a link ages.** One request for statistics runs one
+count per day since the link was created, whatever `days` asks to list, because
+the total covers the link's whole life: a year-old link costs 365 queries (eight
+at a time). And `count(*)` is not a stored number; it reads every row of the
+partition, so the cost also grows with the clicks of each day. Fine for links
+weeks or months old with modest traffic; this is the first place to change if
+either grows.
+
+The change, when needed: once a day is over, count its partition once and store
+the number in a table `daily_clicks` (partition key `link_id`, clustering `day`).
+A finished day never changes, so counting it again writes the same number over
+the same row: idempotent, unlike a `+1` counter. The total becomes one read of
+`daily_clicks` plus a count of today, two queries however old the link is.

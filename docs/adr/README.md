@@ -7,7 +7,7 @@ considered, and what it costs.
 |---|---|---|
 | [0001](0001-redis-streams-over-kafka.md) | Redis Streams, not Kafka, for click events | The queue between the API and the worker, using what is already there |
 | [0002](0002-cassandra-for-clicks.md) | Cassandra for clicks | One table per question, idempotent writes, clicks kept forever |
-| [0003](0003-sliding-window-rate-limiting.md) | Sliding-window rate limiting | Per user for creating links, per IP for redirects and login |
+| [0003](0003-sliding-window-rate-limiting.md) | Sliding-window rate limiting | Per user for creating links, per IP for redirects, login and registration |
 | [0004](0004-uniform-errors-and-destination-checks.md) | One error format, only public destinations | Stable error codes; no `localhost` or internal addresses |
 | [0005](0005-mongodb-for-users-and-links.md) | MongoDB for users and links | Source of truth; unique indexes guarantee uniqueness |
 | [0006](0006-random-short-codes-with-a-unique-index.md) | Random short codes | Unguessable, made unique by the database |

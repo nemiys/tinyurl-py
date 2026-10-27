@@ -4,9 +4,11 @@
 Accepted
 
 ## Context
-Three endpoints invite abuse: creating links (a script can mint millions),
+Four endpoints invite abuse: creating links (a script can mint millions),
 redirects (code guessing is a stream of requests for unknown codes, each one
-costing a Mongo lookup) and login (password guessing). Each needs a cap on
+costing a Mongo lookup), login (password guessing) and registration (each
+sign-up is an argon2 hash, and every new account brings a fresh allowance for
+creating links). Each needs a cap on
 requests per time, a clear "too many requests" answer, and a hint for
 well-behaved clients about when to come back.
 
@@ -23,6 +25,7 @@ last place.
 | Creating links | the logged-in user | 20 per minute |
 | Redirect | client IP | 120 per minute |
 | Login | client IP | 10 per minute |
+| Registration | client IP | 10 per hour |
 
 All values are settings. A refusal is `429` with `Retry-After`, the number of
 seconds until the oldest counted request leaves the window, rounded up.
@@ -32,8 +35,9 @@ Details that matter:
   would extend their own block forever.
 - **Redirect junk paths are not counted.** The format check (`is_valid_code`)
   runs first and costs nothing; well-formed but unknown codes are counted,
-  which is what slows guessing. Login is limited before the password check so a
-  flood does not also load the CPU with argon2.
+  which is what slows guessing. Login and registration are limited before the
+  password is hashed or checked, so a flood does not also load the CPU with
+  argon2. They use separate keys, so neither allowance uses up the other.
 - **Fail open.** If Redis is unreachable the limiter allows the request and logs a
   warning. Consistent with the cache and the click queue: Redis problems must
   not become outages of the redirect.

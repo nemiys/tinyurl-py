@@ -210,6 +210,7 @@ src/tinyurl_py/
   seed.py       the demo data
 cassandra/      schema.cql, applied by the cassandra-init service
 docs/adr/       architecture decision records
+scripts/        smoke test of the running containers (CI runs it on every push)
 tests/          unit/ and integration/ (integration needs the databases running)
 ```
 
@@ -233,6 +234,9 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy src tests
 uv run pytest --cov          # fails below 95% coverage
+
+docker compose up -d --build --wait
+bash scripts/smoke_test.sh   # the built image, end to end (needs curl and jq)
 ```
 
 The tests use their own MongoDB database (`tinyurl_test`) and Redis database

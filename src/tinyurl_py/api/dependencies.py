@@ -149,3 +149,18 @@ async def limit_login(request: Request, redis: RedisClient) -> None:
         window_seconds=settings.login_window_seconds,
         detail="Too many login attempts, please wait",
     )
+
+
+async def limit_registration(request: Request, redis: RedisClient) -> None:
+    """Few sign-ups per client IP, checked before the password is hashed.
+
+    Its own key, separate from login, so neither allowance uses up the other.
+    Failed attempts count too: probing which emails are taken is not free.
+    """
+    await enforce_rate_limit(
+        redis,
+        f"register:ip:{client_ip(request)}",
+        limit=settings.register_limit,
+        window_seconds=settings.register_window_seconds,
+        detail="Too many sign-ups from this address, please wait",
+    )

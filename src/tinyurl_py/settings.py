@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # Login attempts per client IP: slows down password guessing.
     login_limit: int = 10
     login_window_seconds: int = 60
+    # Sign-ups per client IP. A person registers once; a script opening accounts
+    # by the hundred would load the CPU with argon2 and walk around the per-user
+    # limit on creating links.
+    register_limit: int = 10
+    register_window_seconds: int = 3600
 
     # Name of this worker inside the consumer group. Run several workers by
     # giving each its own name. A restarted worker keeping its name picks up

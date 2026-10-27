@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pymongo.errors import DuplicateKeyError
 
-from tinyurl_py.api.dependencies import Database, limit_login
+from tinyurl_py.api.dependencies import Database, limit_login, limit_registration
 from tinyurl_py.api.schemas import LoginRequest, RegisterRequest, TokenResponse, UserPublic
 from tinyurl_py.security.passwords import hash_password, verify_password
 from tinyurl_py.security.tokens import create_access_token
@@ -24,7 +24,11 @@ _DUMMY_HASH = hash_password("a-password-nobody-has")
     "/register",
     status_code=201,
     response_model=UserPublic,
-    responses={409: {"description": "This email is already registered"}},
+    dependencies=[Depends(limit_registration)],
+    responses={
+        409: {"description": "This email is already registered"},
+        429: {"description": "Too many sign-ups from this address; see Retry-After"},
+    },
 )
 async def register(body: RegisterRequest, db: Database) -> UserPublic:
     # "Dana@Example.com" and "dana@example.com" are the same person; storing

@@ -75,7 +75,7 @@ docker compose start worker      # a moment later the statistics show 10 more
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
     client([Client]) -->|HTTP| api[FastAPI API]
     api -->|users, links: the source of truth| mongo[(MongoDB)]
     subgraph redis [Redis]

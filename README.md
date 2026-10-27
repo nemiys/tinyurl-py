@@ -148,7 +148,7 @@ sequenceDiagram
 | `GET /links/{code}` | One of your links | ✓ |
 | `GET /links/{code}/stats` | Total clicks and clicks per day (`days`, up to 90) | ✓ |
 | `DELETE /links/{code}` | Delete a link (it keeps its statistics) | ✓ |
-| `GET /{code}` | The redirect: `302`, or `404` / `410` | |
+| `GET /{code}` | The redirect: `302`, or `404` / `410`. `HEAD` gets the same answer and is not counted as a click | |
 | `GET /health`, `GET /ready` | The process is up / it can reach MongoDB | |
 
 Another user's link answers `404`, exactly like a code that does not exist, so

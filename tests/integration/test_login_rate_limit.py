@@ -58,7 +58,7 @@ async def test_another_ip_is_not_affected(http: AsyncClient) -> None:
         assert await attempt(other_ip, PASSWORD) == 200
 
 
-async def test_registration_is_not_limited(http: AsyncClient) -> None:
+async def test_login_attempts_do_not_use_up_registration(http: AsyncClient) -> None:
     for n in range(LIMIT + 2):
         await attempt(http, f"wrong password {n}")  # uses up the login allowance
 

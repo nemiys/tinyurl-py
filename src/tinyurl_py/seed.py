@@ -2,7 +2,10 @@
 not an empty page.
 
     uv run python -m tinyurl_py.seed
-    docker compose exec api python -m tinyurl_py.seed
+    docker compose run --rm api python -m tinyurl_py.seed
+
+(`run`, not `exec`: only `run` goes through the image's entrypoint, which
+supplies a JWT secret when none is set, and the settings refuse to load without one.)
 
 To remove the demo data and nothing else:  python -m tinyurl_py.seed --remove
 

@@ -7,6 +7,7 @@ what we will do once the app itself runs inside a container: there,
 "localhost:6381" reaches nothing, and the right address is the service name.
 """
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,7 +28,9 @@ class Settings(BaseSettings):
     # Signs every login token, so whoever holds it can forge a token for any
     # user. Deliberately has NO default: the app refuses to start without one,
     # instead of silently running with a key that anyone reading the code knows.
-    jwt_secret: str
+    # At least 32 characters (256 bits, the key size HS256 calls for). This also
+    # refuses an empty value, which a copied .env.example would otherwise give.
+    jwt_secret: str = Field(min_length=32)
     jwt_expire_minutes: int = 60
 
     # Rate limits (sliding window). Creating links is limited per user; redirects

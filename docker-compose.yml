@@ -12,8 +12,13 @@ services:
   redis:
     image: redis:7
     container_name: tinyurl-py-redis
+    # Append-only file, flushed once a second: clicks still waiting in the
+    # stream survive a Redis crash, losing at most about one second of them.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     ports:
-      - "6381:6379" # 6379 is used by the old nemiys-tinyurl, 6380 by wikiguard-py
+      - "6381:6379" # non-default host port, so it can run next to other local projects
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -24,7 +29,7 @@ services:
     image: mongo:8
     container_name: tinyurl-py-mongo
     ports:
-      - "27018:27017" # 27017 is used by the old nemiys-tinyurl
+      - "27018:27017" # non-default host port
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -37,7 +42,7 @@ services:
     image: cassandra:5
     container_name: tinyurl-py-cassandra
     ports:
-      - "9043:9042" # 9042 is used by the old nemiys-tinyurl
+      - "9043:9042" # non-default host port
     environment:
       # Cassandra defaults to using a large part of the machine's RAM; this
       # is a local dev instance, so keep it small.
@@ -120,5 +125,6 @@ services:
         condition: service_completed_successfully
 
 volumes:
+  redis-data:
   mongo-data:
   cassandra-data:

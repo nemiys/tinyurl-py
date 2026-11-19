@@ -11,8 +11,8 @@ needed between the two: the API must never block on the slow write, and a
 worker crash must not lose events.
 
 The sibling project `wikiguard-py` solves the same shape of problem with
-Kafka (see its ADR-0002), where Kafka was chosen on purpose as the thing to
-learn. Here the goal is different.
+Kafka (see its ADR-0001), where Kafka was chosen deliberately to build on
+partitions and consumer-group rebalancing. Here the needs are different.
 
 ## Decision
 Redis Streams (via `redis.asyncio`), read by a consumer group. The worker
@@ -37,7 +37,11 @@ After a message is acknowledged it is also deleted from the stream.
   the queue, and it cannot be shared by several worker processes.
 
 ## Consequences
-Streams live mostly in memory. Because the worker deletes what it has handled, the
+Streams live in memory, so Redis runs with an append-only file flushed once a
+second (`appendonly yes`, `appendfsync everysec`) on a persistent volume: after
+a crash it replays the file, and at most about one second of clicks is lost.
+Flushing on every write (`always`) would lose none, at the cost of a disk write
+per click. Because the worker deletes what it has handled, the
 stream holds only what is still waiting (a length cap would instead delete unhandled
 events when the worker is down for long). Its length is the number of clicks not yet
 counted, which is worth watching. Throughput and retention are lower than Kafka's. If

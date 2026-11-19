@@ -29,8 +29,8 @@ token's header (the classic "alg" attack) and requires `exp` and `sub`.
 because a key that anyone reading the repository knows would let anyone forge
 logins. It must also be at least 32 characters (256 bits, the key size HS256
 calls for); an empty or short value stops the start just the same, rather than
-letting the app run and fail on every login. Every request also checks that the user still exists, so the token of a
-deleted account stops working at once.
+letting the app run and fail on every login. Every request also checks that
+the user still exists, so the token of a deleted account stops working at once.
 
 **Authorisation** is part of the query, not a check after it: link lookups filter
 on code **and** owner, so someone else's link answers `404`, exactly like a code

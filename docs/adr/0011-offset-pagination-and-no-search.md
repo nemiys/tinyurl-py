@@ -6,7 +6,7 @@ Accepted
 ## Context
 A user lists their own links. The list can grow, so it must come in pages, and
 an endpoint that can return "everything" is a way to make one request expensive.
-Users also asked, in effect, for filtering and ordering.
+A list of links also needs filtering and ordering.
 
 ## Decision
 `GET /links` takes `limit` (1 to 100, default 20) and `offset` (0 or more). The

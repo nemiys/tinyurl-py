@@ -6,11 +6,11 @@ A URL shortener with **smart links**: one short link can send phones to a
 different address than desktops, and can stop working at a set time. Every
 click is counted, and the owner sees clicks per day.
 
-A Python rewrite and upgrade of a course project (Java/Spring). The point is
-sound backend fundamentals (REST, authentication, one error format, tests, CI)
-and system design whose choices are explained: which data store holds what,
-where the cache sits, and how counting a click never slows down the redirect.
-Every significant decision is recorded in [`docs/adr/`](docs/adr/README.md).
+It focuses on backend fundamentals (REST, authentication, one error format,
+tests, CI) and on system design with explained choices: which data store holds
+what, where the cache sits, and how counting a click never slows down the
+redirect. Every significant decision is recorded — see
+[Design decisions](#design-decisions).
 
 ## Quick start
 
@@ -250,6 +250,20 @@ projects: API 8001, MongoDB 27018, Redis 6381, Cassandra 9043.
 Each significant choice is recorded in [`docs/adr/`](docs/adr/README.md): what
 was decided, what else was considered, and why. Not a changelog: one record per
 decision that would be expensive to reverse.
+
+| ADR | Decision | Rejected alternatives |
+|---|---|---|
+| [0001](docs/adr/0001-redis-streams-over-kafka.md) | Redis Streams carry click events to a worker, acknowledged only after the write | Kafka; writing to Cassandra inside the request; an in-process `asyncio.Queue` |
+| [0002](docs/adr/0002-cassandra-for-clicks.md) | Cassandra for clicks, one partition per link and day, idempotent writes | A TTL on every row; a daily summary table; MongoDB for clicks |
+| [0003](docs/adr/0003-sliding-window-rate-limiting.md) | Sliding-window rate limiting in Redis, one atomic Lua script, fail open | A fixed window; a sliding window counter; a token bucket; fail closed |
+| [0004](docs/adr/0004-uniform-errors-and-destination-checks.md) | One error format; only public destinations, checked with DNS | RFC 7807 problem+json; refusing names that do not resolve; a text-only check |
+| [0005](docs/adr/0005-mongodb-for-users-and-links.md) | MongoDB for users and links, uniqueness by unique indexes | PostgreSQL; Cassandra for links; Redis as the only store |
+| [0006](docs/adr/0006-random-short-codes-with-a-unique-index.md) | Random 7-character codes, made unique by the database | A base62 counter; a hash of the URL; a pool of pre-generated codes; check then insert |
+| [0007](docs/adr/0007-redirect-with-302.md) | Redirect with `302` and `no-store`, so every click comes back | `301`/`308` permanent redirects; an HTML or JavaScript redirect |
+| [0008](docs/adr/0008-soft-delete-for-links.md) | Soft delete: a deleted link keeps its statistics and its code | Removing the row; an archive collection |
+| [0009](docs/adr/0009-authentication-argon2-and-jwt.md) | argon2 passwords and HS256 JWTs; another user's link answers `404` | Server-side sessions; bcrypt or PBKDF2; RS256 |
+| [0010](docs/adr/0010-cache-aside-with-a-bounded-time-limit.md) | Cache-aside in Redis that never outlives the link | Write-through; no cache; caching misses |
+| [0011](docs/adr/0011-offset-pagination-and-no-search.md) | Offset pagination with closed filters, no free-text search | Cursor pagination; regex search |
 
 ## License
 

@@ -78,4 +78,3 @@ Details that matter:
   letting an attacker lock a victim out. Not done.
 - With several API servers, slightly different clocks blur the window by that
   difference. Moving the clock into the Lua script (`TIME`) would remove it.
-- Registration is not limited yet.

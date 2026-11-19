@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Host ports are deliberately non-default so this project can run next to
-    # wikiguard-py (Redis 6380) and the old nemiys-tinyurl (6379, 27017, 9042).
+    # other local projects that use the defaults.
     redis_url: str = "redis://localhost:6381"
     mongo_url: str = "mongodb://localhost:27018"
     mongo_database: str = "tinyurl"

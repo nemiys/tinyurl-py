@@ -31,9 +31,10 @@ being retired in its favour).
 
 ## Alternatives considered
 - **PostgreSQL**: would work equally well at this size, and users plus links are
-  relational enough. Not chosen because the sibling project `wikiguard-py` already
-  shows PostgreSQL, and here a document store has a real use: optional fields
-  and rule-like data that grows without a schema migration for each addition.
+  relational enough. Not chosen because a document store has a real use here:
+  optional fields and rule-like data that grow without a schema migration for
+  each addition. It also complements the sibling project `wikiguard-py`, which
+  already uses PostgreSQL.
 - **Cassandra for links**: it is used for clicks, where it fits. For links it
   would be a poor fit: lookups by several fields would need several tables, and
   a uniqueness guarantee needs lightweight transactions, which are slow and

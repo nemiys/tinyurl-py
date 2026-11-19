@@ -23,6 +23,10 @@ the queue; the Cassandra primary key includes both, so a redelivered event
 overwrites the same row instead of creating a duplicate. A message that waits too
 long with a worker that died is taken over by another one (`XAUTOCLAIM`), and a
 message that can never be read is logged and dropped so it cannot block the queue.
+A message that can be read but whose save keeps failing is tried five times; the fifth
+failure copies it to a separate stream, `clicks:dead`, and removes it from the queue, so
+one bad message never stops the clicks behind it. Each worker continues `XAUTOCLAIM`
+from where its previous call stopped, so a long pending list is walked through.
 After a message is acknowledged it is also deleted from the stream.
 
 ## Alternatives considered

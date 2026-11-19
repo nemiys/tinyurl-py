@@ -15,7 +15,7 @@ from redis.exceptions import ResponseError
 
 from tinyurl_py.events.clicks import CLICKS_STREAM, ClickEvent, publish_click
 from tinyurl_py.persistence.click_store import ClickStore
-from tinyurl_py.worker.consumer import GROUP, ClickConsumer
+from tinyurl_py.worker.consumer import DEAD_LETTERS_STREAM, GROUP, MAX_ATTEMPTS, ClickConsumer
 
 
 class FakeStore:
@@ -239,3 +239,46 @@ async def test_setup_fails_loudly_on_a_real_problem(redis_client: Redis) -> None
 
     with pytest.raises(ResponseError):
         await consumer.setup()
+
+
+async def test_a_message_that_keeps_failing_is_set_aside_and_the_queue_moves_on(
+    redis_client: Redis,
+) -> None:
+    store = FakeStore(failures=1000)
+    consumer = await make_consumer(redis_client, store)
+    poison = new_event("poison")
+    await publish_click(redis_client, poison)
+
+    for _ in range(MAX_ATTEMPTS - 1):
+        with pytest.raises(RuntimeError):
+            await consumer.run_once()
+    await consumer.run_once()  # the last attempt fails too: set aside, no error
+
+    store.failures = 0
+    good = new_event("good")
+    await publish_click(redis_client, good)
+    await consumer.run_once()
+
+    assert store.saved == [good]
+    assert await pending_count(redis_client) == 0
+    dead: Any = await redis_client.xrange(DEAD_LETTERS_STREAM)
+    assert len(dead) == 1
+    assert ClickEvent.model_validate_json(dead[0][1]["data"]) == poison
+
+
+async def test_claiming_continues_where_the_last_claim_stopped(redis_client: Redis) -> None:
+    """With more stale messages than one batch, the next claim must move on to the next
+    ones, not take the first ones again."""
+    first_worker = await make_consumer(redis_client, FakeStore(failures=1000), name="worker-1")
+    await publish_click(redis_client, new_event("a"))
+    await publish_click(redis_client, new_event("b"))
+    await first_worker._read_new(wait=False)  # worker-1 takes both, then dies
+
+    other = await make_consumer(
+        redis_client, FakeStore(), name="worker-2", claim_idle_ms=0, batch_size=1
+    )
+    first = await other._claim_stale()
+    second = await other._claim_stale()
+
+    assert len(first) == len(second) == 1
+    assert first[0][0] != second[0][0]

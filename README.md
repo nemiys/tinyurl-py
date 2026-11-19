@@ -127,7 +127,8 @@ sequenceDiagram
 - **No click is lost.** The worker acknowledges an event only after Cassandra
   has it. If the worker crashes in between, the event stays pending and is
   processed again; a worker that dies for good has its events taken over by
-  another.
+  another. An event that still fails after five attempts is set aside in a
+  separate stream (`clicks:dead`) instead of blocking the clicks behind it.
 - **No click is counted twice.** Each event carries its own id and time, and
   they form the row's key. Writing the same event again overwrites the same
   row instead of adding one.

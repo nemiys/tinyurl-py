@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 # Every worker joins this one group, so each message goes to exactly one of them.
 GROUP = "click-workers"
 
+# A message whose save fails this many times is set aside instead of blocking the
+# queue: it is copied to DEAD_LETTERS_STREAM (where it can be inspected and
+# replayed) and removed from the main stream.
+MAX_ATTEMPTS = 5
+DEAD_LETTERS_STREAM = "clicks:dead"
+# Failed attempts per message id, cleared once the message is finished.
+ATTEMPTS_KEY = "clicks:attempts"
+
 # A message id with its fields; fields is None if the entry was deleted meanwhile.
 type Message = tuple[str, dict[str, str] | None]
 
@@ -59,6 +67,9 @@ class ClickConsumer:
         self._block_ms = block_ms
         self._batch_size = batch_size
         self._retry_delay_s = retry_delay_s
+        # Where the next XAUTOCLAIM continues, so a long pending list is walked
+        # through instead of always starting over from its beginning.
+        self._claim_cursor = "0-0"
 
     async def setup(self) -> None:
         """Create the group (and the stream) if they do not exist yet."""
@@ -108,9 +119,11 @@ class ClickConsumer:
             GROUP,
             self._name,
             min_idle_time=self._claim_idle_ms,
-            start_id="0-0",
+            start_id=self._claim_cursor,
             count=self._batch_size,
         )
+        # "0-0" when the whole pending list has been walked: start over next time.
+        self._claim_cursor = result[0]
         messages: list[Message] = result[1]
         return messages
 
@@ -133,8 +146,18 @@ class ClickConsumer:
     async def _handle(self, message_id: str, fields: dict[str, str] | None) -> None:
         event = self._parse(message_id, fields)
         if event is not None:
-            # If this raises we never reach the acknowledgement below.
-            await self._store.save(event)
+            try:
+                await self._store.save(event)
+            except Exception:
+                attempts = await self._redis.hincrby(ATTEMPTS_KEY, message_id, 1)
+                if attempts < MAX_ATTEMPTS:
+                    # Not acknowledged: it stays pending and is tried again.
+                    raise
+                logger.exception(
+                    "Setting aside message %s after %d failed attempts", message_id, attempts
+                )
+                dead_letter: dict[Any, Any] = dict(fields or {})
+                await self._redis.xadd(DEAD_LETTERS_STREAM, dead_letter)
         await self._finish(message_id)
 
     def _parse(self, message_id: str, fields: dict[str, str] | None) -> ClickEvent | None:
@@ -155,4 +178,5 @@ class ClickConsumer:
         async with self._redis.pipeline(transaction=True) as pipe:
             pipe.xack(CLICKS_STREAM, GROUP, message_id)
             pipe.xdel(CLICKS_STREAM, message_id)
+            pipe.hdel(ATTEMPTS_KEY, message_id)
             await pipe.execute()

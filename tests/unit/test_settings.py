@@ -1,5 +1,7 @@
 """The JWT secret must be long enough to be a real key."""
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -24,3 +26,19 @@ def test_a_short_secret_is_refused() -> None:
 
 def test_a_32_character_secret_is_accepted() -> None:
     assert make("x" * 32).jwt_secret == "x" * 32
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "create_link_limit",
+        "redirect_limit",
+        "login_limit",
+        "register_limit",
+        "redirect_window_seconds",
+    ],
+)
+def test_a_rate_limit_or_window_of_zero_is_refused(field: str) -> None:
+    with pytest.raises(ValidationError, match=field):
+        values: dict[str, Any] = {field: 0}
+        Settings(_env_file=None, jwt_secret="x" * 32, **values)

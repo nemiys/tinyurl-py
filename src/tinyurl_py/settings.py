@@ -2,12 +2,12 @@
 
 Defaults point at the host-mapped Docker ports from docker-compose.yml, so a
 normal local run needs no setup. Every value can be overridden through an
-environment variable (or a local `.env` file, which is git-ignored), which is
-what we will do once the app itself runs inside a container: there,
-"localhost:6381" reaches nothing, and the right address is the service name.
+environment variable (or a local `.env` file, which is git-ignored). That is
+what docker-compose.yml does for the containers: there, "localhost:6381"
+reaches nothing, and the right address is the service name.
 """
 
-from pydantic import Field
+from pydantic import Field, PositiveInt
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,18 +35,19 @@ class Settings(BaseSettings):
 
     # Rate limits (sliding window). Creating links is limited per user; redirects
     # per client IP, generously, because an office or school shares one address.
-    create_link_limit: int = 20
-    create_link_window_seconds: int = 60
-    redirect_limit: int = 120
-    redirect_window_seconds: int = 60
+    # All positive: a limit of 0 is not a way to switch a limit off.
+    create_link_limit: PositiveInt = 20
+    create_link_window_seconds: PositiveInt = 60
+    redirect_limit: PositiveInt = 120
+    redirect_window_seconds: PositiveInt = 60
     # Login attempts per client IP: slows down password guessing.
-    login_limit: int = 10
-    login_window_seconds: int = 60
+    login_limit: PositiveInt = 10
+    login_window_seconds: PositiveInt = 60
     # Sign-ups per client IP. A person registers once; a script opening accounts
     # by the hundred would load the CPU with argon2 and walk around the per-user
     # limit on creating links.
-    register_limit: int = 10
-    register_window_seconds: int = 3600
+    register_limit: PositiveInt = 10
+    register_window_seconds: PositiveInt = 3600
 
     # Name of this worker inside the consumer group. Run several workers by
     # giving each its own name. A restarted worker keeping its name picks up

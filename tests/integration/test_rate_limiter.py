@@ -133,3 +133,14 @@ async def test_a_dead_redis_lets_requests_through() -> None:
 
     assert result.allowed
     await dead.aclose()
+
+
+async def test_a_limit_of_zero_refuses_everything_instead_of_allowing_everything(
+    redis_client: Redis,
+) -> None:
+    limiter, _ = make_limiter(redis_client)
+
+    result = await limiter.check("blocked", limit=0, window_seconds=60)
+
+    assert result.allowed is False
+    assert result.retry_after_seconds >= 1

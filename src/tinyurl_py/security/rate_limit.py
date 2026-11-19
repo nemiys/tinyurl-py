@@ -49,6 +49,10 @@ end
 -- Refused. NOT recorded: otherwise whoever keeps hammering would stay blocked
 -- forever. The oldest request in the window is the first to leave it.
 local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+if oldest[2] == nil then
+  -- Nothing recorded, yet refused: only with a limit of 0. Wait a whole window.
+  return {0, 0, window}
+end
 return {0, 0, tonumber(oldest[2]) + window - now}
 """
 

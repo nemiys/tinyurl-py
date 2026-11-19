@@ -24,7 +24,8 @@ build/
 coverage.xml
 htmlcov/
 
-# Personal assistant instructions (the shared project guide is CLAUDE.md)
+# Local working notes
+CLAUDE.md
 CLAUDE.local.md
 
 # Logs

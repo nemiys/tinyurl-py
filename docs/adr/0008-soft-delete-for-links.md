@@ -20,9 +20,10 @@ removing it.
 - The statistics endpoint deliberately does not filter on it, and reports
   `deleted: true`, so the numbers of a deleted link remain reachable by its owner.
 - The row keeps occupying the unique index, so the code cannot be reused.
-- The cached copy in Redis is removed right after the row is marked, and only
-  after: clearing the cache first would let a click in between copy the link
-  straight back from Mongo. If Redis is down at that moment the delete still
+- The cached copy in Redis is replaced by a short-lived tombstone right after the
+  row is marked, and only after: clearing the cache first would let a click in
+  between copy the link straight back from Mongo. The tombstone also stops a click
+  that read the link just before the delete from caching it just after (ADR-0010). If Redis is down at that moment the delete still
   succeeds and the copy expires on its own within the cache time limit (ADR-0010).
 
 ## Alternatives considered

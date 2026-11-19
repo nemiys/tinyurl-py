@@ -13,6 +13,7 @@ from redis.asyncio import Redis, from_url
 from tests.integration.conftest import LoggedIn
 from tests.integration.test_get_link import register_other_user
 from tinyurl_py.api.dependencies import get_redis
+from tinyurl_py.cache.links import get_cached_link
 from tinyurl_py.main import app
 
 
@@ -42,7 +43,8 @@ async def test_deleted_link_stops_redirecting_even_if_it_was_cached(
 
     await web.delete(f"/links/{code}", headers=logged_in.headers)
 
-    assert await redis_client.exists(f"link:{code}") == 0
+    # The cached copy is replaced by a short-lived tombstone (see cache/links.py).
+    assert await get_cached_link(redis_client, code) is None
     assert (await web.get(f"/{code}")).status_code == 404
 
 

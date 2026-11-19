@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 # Mongo, which also limits how stale a copy can get.
 DEFAULT_TTL_SECONDS = 3600
 
+# What a deleted link leaves in the cache for a short while. A redirect that read
+# the link from Mongo just before the deletion would otherwise write it back to
+# the cache just after it; writes never replace an existing entry, so the marker
+# wins. A minute is far longer than that window, and after it Mongo answers 404.
+TOMBSTONE = "deleted"
+TOMBSTONE_TTL_SECONDS = 60
+
 
 class CachedLink(BaseModel):
     """Just what a redirect needs; not the whole Mongo document."""
@@ -51,13 +58,18 @@ async def get_cached_link(redis: Redis, code: str) -> CachedLink | None:
     except RedisError:
         logger.warning("Redis read failed for %s; treating it as a cache miss", code)
         return None
-    if raw is None:
+    if raw is None or raw == TOMBSTONE:
         return None
     try:
         return CachedLink.model_validate_json(raw)
     except ValidationError:
-        # A leftover in an old format; ignore it, it will be overwritten.
+        # A leftover in an old format. Removed, so the next write can replace it
+        # (writes never overwrite an existing entry).
         logger.warning("Unreadable cache entry for %s; treating it as a miss", code)
+        try:
+            await redis.delete(_key(code))
+        except RedisError:
+            pass
         return None
 
 
@@ -67,15 +79,17 @@ async def cache_link(redis: Redis, code: str, link: CachedLink) -> None:
         return
     try:
         # `ex` = expire after this many seconds; Redis deletes the entry itself.
-        await redis.set(_key(code), link.model_dump_json(), ex=ttl)
+        # `nx` = only if nothing is there: never over a deleted link's tombstone.
+        await redis.set(_key(code), link.model_dump_json(), ex=ttl, nx=True)
     except RedisError:
         logger.warning("Redis write failed for %s; continuing without cache", code)
 
 
 async def delete_cached_link(redis: Redis, code: str) -> None:
-    """Drop the copy of a deleted link. If Redis is down the copy simply
-    expires by itself within DEFAULT_TTL_SECONDS, so this is best effort."""
+    """Replace the copy of a deleted link with a short-lived tombstone. If Redis is
+    down the copy simply expires by itself within DEFAULT_TTL_SECONDS, so this is
+    best effort."""
     try:
-        await redis.delete(_key(code))
+        await redis.set(_key(code), TOMBSTONE, ex=TOMBSTONE_TTL_SECONDS)
     except RedisError:
         logger.warning("Redis delete failed for %s; the cached copy will expire by itself", code)

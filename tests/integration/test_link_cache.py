@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from redis.asyncio import Redis, from_url
 
-from tinyurl_py.cache.links import CachedLink, cache_link, get_cached_link
+from tinyurl_py.cache.links import CachedLink, cache_link, delete_cached_link, get_cached_link
 from tinyurl_py.settings import settings
 
 LINK = CachedLink(
@@ -95,3 +95,20 @@ async def test_an_unreadable_cache_entry_is_treated_as_a_miss(redis_client: Redi
     await redis_client.set("link:aB3dE9x", "not json at all")
 
     assert await get_cached_link(redis_client, "aB3dE9x") is None
+
+
+async def test_a_link_read_before_its_deletion_is_not_cached_after_it(redis_client: Redis) -> None:
+    """The race: a redirect reads the link from Mongo, the owner deletes it (which clears the
+    cache), and only then does the redirect write its copy. The deletion must win."""
+    await delete_cached_link(redis_client, "aB3dE9x")
+    await cache_link(redis_client, "aB3dE9x", LINK)  # the late write of the redirect
+
+    assert await get_cached_link(redis_client, "aB3dE9x") is None
+
+
+async def test_an_unreadable_entry_is_replaced_on_the_next_write(redis_client: Redis) -> None:
+    await redis_client.set("link:aB3dE9x", "an entry in an old format")
+
+    assert await get_cached_link(redis_client, "aB3dE9x") is None
+    await cache_link(redis_client, "aB3dE9x", LINK)
+    assert await get_cached_link(redis_client, "aB3dE9x") == LINK

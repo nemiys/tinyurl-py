@@ -25,8 +25,12 @@ destination, expiry), not the whole document.
   as a miss and a write is skipped (with a warning); the connection uses short
   timeouts so "down" is noticed in half a second. An entry that cannot be read (an
   old format) is also treated as a miss and is overwritten.
-- **Deleting a link removes its entry** right after the row is marked deleted
-  (ADR-0008). If that fails, the entry expires within the time limit.
+- **Deleting a link replaces its entry with a tombstone** for one minute, right after
+  the row is marked deleted (ADR-0008), and a cache write never replaces an existing
+  entry (`SET NX`). A redirect that read the link from Mongo just before the deletion
+  would otherwise write it back to the cache just after it, and the deleted link would
+  keep working for up to the time limit. If Redis is down, the entry expires within
+  the time limit.
 - **Nothing is cached for codes that do not exist.** Every unknown (but
   well-formed) code goes to Mongo. It is bounded by the format check and the
   per-IP rate limit (ADR-0003) rather than by caching misses.
